@@ -7,6 +7,11 @@ nonisolated struct CurrencyPreferences: Codable, Sendable, Equatable {
 
     var enabledCodes: [String]
     var defaultCode: String
+    // Older settings/backups only stored enabled codes. A separate added list
+    // now keeps switched-off currencies visible on the main settings screen.
+    var addedCodes: [String]? = nil
+
+    var listedCodes: [String] { addedCodes ?? enabledCodes }
 
     static var availableCodes: [String] {
         Array(Set(Locale.commonISOCurrencyCodes + defaults.enabledCodes)).filter(isCurrencyCode).sorted()
@@ -23,7 +28,10 @@ nonisolated struct CurrencyPreferences: Codable, Sendable, Equatable {
     var isValid: Bool {
         !enabledCodes.isEmpty && enabledCodes.count <= 256 &&
         Set(enabledCodes).count == enabledCodes.count &&
-        enabledCodes.allSatisfy(Self.isCurrencyCode) && enabledCodes.contains(defaultCode)
+        enabledCodes.allSatisfy(Self.isCurrencyCode) && enabledCodes.contains(defaultCode) &&
+        !listedCodes.isEmpty && listedCodes.count <= 256 &&
+        Set(listedCodes).count == listedCodes.count && listedCodes.allSatisfy(Self.isCurrencyCode) &&
+        Set(enabledCodes).isSubset(of: Set(listedCodes))
     }
 
     static func decode(_ stored: String) -> CurrencyPreferences {
@@ -47,13 +55,29 @@ nonisolated struct CurrencyPreferences: Codable, Sendable, Equatable {
     func settingEnabled(_ code: String, to enabled: Bool) -> CurrencyPreferences {
         guard Self.isCurrencyCode(code) else { return self }
         var updated = self
+        updated.addedCodes = listedCodes
         if enabled {
+            if !updated.listedCodes.contains(code) { updated.addedCodes?.append(code) }
             if !updated.enabledCodes.contains(code) { updated.enabledCodes.append(code) }
         } else {
             guard updated.enabledCodes.count > 1 else { return self }
             updated.enabledCodes.removeAll { $0 == code }
             if updated.defaultCode == code { updated.defaultCode = updated.enabledCodes[0] }
         }
+        return updated.isValid ? updated : self
+    }
+
+    func selectingCodes(_ codes: [String]) -> CurrencyPreferences {
+        guard !codes.isEmpty, codes.count <= 256,
+              Set(codes).count == codes.count, codes.allSatisfy(Self.isCurrencyCode) else { return self }
+        let previouslyAdded = Set(listedCodes)
+        var updated = self
+        updated.addedCodes = codes
+        // Retain off switches for currencies already added. Newly added ones
+        // start enabled; removing a currency removes it from new-wallet choices.
+        updated.enabledCodes = enabledCodes.filter { codes.contains($0) } + codes.filter { !previouslyAdded.contains($0) }
+        if updated.enabledCodes.isEmpty { updated.enabledCodes = [codes[0]] }
+        if !updated.enabledCodes.contains(defaultCode) { updated.defaultCode = updated.enabledCodes[0] }
         return updated.isValid ? updated : self
     }
 

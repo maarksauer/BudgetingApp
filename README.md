@@ -62,22 +62,22 @@ Tap a wallet, transaction, transfer, budget, or bill to open its existing detail
 
 ## Currency management
 
-Open **More → Currencies** to search by code or currency name and enable the currencies you use. The available list uses the device's currency catalog, with localized names. HUF, EUR, GBP, and USD remain enabled initially, with HUF as the default. Settings are saved immediately and persist after restarting the app.
+Open **More → Currencies** to see your **Added Currencies**, each with an on/off toggle. Tap **Other Currencies** to open the full searchable list, tick the currencies you want in your list, then choose **Done**. Cancel or swipe down leaves the list unchanged. The available list uses the device's currency catalog, with localized names. HUF, EUR, GBP, and USD remain enabled initially, with HUF as the default. Settings are saved immediately and persist after restarting the app.
 
-**Default Currency** controls the initial selection in new wallet and budget forms. New wallets show only enabled currencies. **Manage Currencies** in the new-wallet form opens the same settings without discarding the form. Hiding the default selects the first remaining enabled currency; the final enabled currency cannot be hidden.
+**Default Currency** controls the initial selection in new wallet and budget forms. New wallets show only enabled currencies. **Manage Currencies** in the new-wallet form opens the same settings without discarding the form. Switching a currency off keeps its row visible so you can turn it back on. Switching off the default selects the first remaining enabled currency; the final enabled currency cannot be switched off. In Other Currencies, unticking a currency removes it from Added Currencies when you choose Done. Newly added currencies start enabled; previously added currencies keep their switch setting. Done requires at least one selected currency.
 
 Existing wallets, transfers, transactions, and budgets keep their currencies and amounts when a currency is hidden. Wallet currency remains fixed after creation. Budget pickers include enabled currencies plus currencies already used by wallets/budgets, and retain an existing budget's selected currency. Totals remain separate by currency; enabling a currency does not add conversion rates or convert balances.
 
-New backups use format version 2 and include the enabled currencies and default. Restore previews show both preferences and apply them after the data save succeeds. Version 1 backups from the previous release remain supported and leave the current currency settings intact. Recovery copies also include the current currency preferences.
+New backups use format version 2 and include the added list, enabled currencies, and default. Earlier version 2 backups/settings without an added list use their enabled currencies as the initial added list. Restore previews show both preferences and apply them after the data save succeeds. Version 1 backups from the previous release remain supported and leave the current currency settings intact. Recovery copies also include the current currency preferences.
 
 ### Check currencies
 
-1. Open Currencies, search `JPY`, enable it, and select JPY as the default. Start a new wallet; JPY should be selected and available. Save a sample wallet and check its balance/currency on Home and Wallets.
+1. Open Currencies → Other Currencies, search `JPY`, tick it, and choose Done. JPY should appear under Added Currencies with its switch on. Select JPY as the default. Start a new wallet; JPY should be selected and available. Save a sample wallet and check its balance/currency on Home and Wallets.
 2. Start a new budget and check JPY is selected. Create a JPY expense and check it contributes only to JPY spending/budgets.
-3. Hide JPY while its wallet exists. A fresh wallet form should omit JPY and use the new default; the existing wallet, its history, and its budgets should retain JPY. Budget pickers should still offer it.
-4. Leave only one enabled currency and check its toggle is disabled. Re-enable other currencies, restart the app, and verify the list and default persist.
+3. Switch JPY off while its wallet exists. Its row should remain visible with its switch off, and turning it on again should work. A fresh wallet form should omit JPY and use the new default; the existing wallet, its history, and its budgets should retain JPY. Budget pickers should still offer it.
+4. Leave only one enabled currency and check its toggle is disabled. Re-enable other currencies, restart the app, and verify the added list, off switches, and default persist. Open Other Currencies and change some ticks, then Cancel; the main list should not change.
 5. Open Manage Currencies from a partially filled new-wallet form. Change a currency selection, go back, and check the wallet name/balance remain filled and its currency selection remains available.
-6. Save a backup, change the enabled currencies/default, then restore it. Check the backed-up preferences return. Restore an older version 1 backup and check the current currency settings remain unchanged.
+6. Save a backup with an added currency switched off, change the added list and enabled currencies/default, then restore it. Check the backed-up list and switch settings return. Restore an older version 1 backup and check the current currency settings remain unchanged.
 
 ## Appearance
 

@@ -186,6 +186,7 @@ private struct BackupPreviewView: View {
                     LabeledContent("Created", value: snapshot.createdAt.formatted(date: .abbreviated, time: .shortened))
                     LabeledContent("Appearance", value: AppAppearance(rawValue: snapshot.appearance)?.title ?? "System")
                     if let preferences = snapshot.currencyPreferences {
+                        LabeledContent("Added Currencies", value: preferences.listedCodes.joined(separator: ", "))
                         LabeledContent("Enabled Currencies", value: preferences.enabledCodes.joined(separator: ", "))
                         LabeledContent("Default Currency", value: preferences.defaultCode)
                     } else {

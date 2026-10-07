@@ -678,11 +678,20 @@ final class BudgetingAppTests: XCTestCase {
     func testCurrencySettingsSurviveBackupAndVersionOneBackupsStillRestore() throws {
         let source = try backupContext()
         try populateBackupFixture(source)
-        let preferences = CurrencyPreferences(enabledCodes: ["JPY", "EUR"], defaultCode: "JPY")
+        let preferences = CurrencyPreferences(enabledCodes: ["JPY", "EUR"], defaultCode: "JPY", addedCodes: ["JPY", "EUR", "USD"])
         let captured = try BackupStore.capture(context: source, appearance: .dark, currencyPreferences: preferences)
         let decoded = try AppBackup.decode(AppBackup.encode(captured))
         XCTAssertEqual(decoded.version, 2)
         XCTAssertEqual(decoded.currencyPreferences, preferences)
+        XCTAssertEqual(decoded.currencyPreferences?.listedCodes, ["JPY", "EUR", "USD"])
+        XCTAssertFalse(try XCTUnwrap(decoded.currencyPreferences).enabledCodes.contains("USD"))
+        // Previous version-2 files have enabled codes but no separate added list.
+        var previousJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: AppBackup.encode(captured)) as? [String: Any])
+        var previousSettings = try XCTUnwrap(previousJSON["currencyPreferences"] as? [String: Any])
+        previousSettings.removeValue(forKey: "addedCodes")
+        previousJSON["currencyPreferences"] = previousSettings
+        let previous = try AppBackup.decode(JSONSerialization.data(withJSONObject: previousJSON))
+        XCTAssertEqual(previous.currencyPreferences?.listedCodes, ["JPY", "EUR"])
         XCTAssertEqual(CurrencyPreferences.decode(try XCTUnwrap(decoded.currencyPreferences).storageValue), preferences)
 
         // Actual version-1 JSON has no currency settings key. Optional decoding
@@ -712,7 +721,10 @@ final class BudgetingAppTests: XCTestCase {
             CurrencyPreferences(enabledCodes: ["EUR", "EUR"], defaultCode: "EUR"),
             CurrencyPreferences(enabledCodes: ["EUR"], defaultCode: "HUF"),
             CurrencyPreferences(enabledCodes: ["eur"], defaultCode: "eur"),
-            CurrencyPreferences(enabledCodes: ["EURO"], defaultCode: "EURO")
+            CurrencyPreferences(enabledCodes: ["EURO"], defaultCode: "EURO"),
+            CurrencyPreferences(enabledCodes: ["EUR"], defaultCode: "EUR", addedCodes: []),
+            CurrencyPreferences(enabledCodes: ["EUR"], defaultCode: "EUR", addedCodes: ["JPY"]),
+            CurrencyPreferences(enabledCodes: ["EUR"], defaultCode: "EUR", addedCodes: ["EUR", "EUR"])
         ]
         for preferences in invalidSettings {
             var invalid = valid
