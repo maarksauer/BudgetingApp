@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 
 struct CreateWalletView: View {
+    @AppStorage(CurrencyPreferences.storageKey) private var storedCurrencyPreferences = CurrencyPreferences.defaultStorageValue
 
     @Environment(\.dismiss)
     private var dismiss
@@ -11,7 +12,7 @@ struct CreateWalletView: View {
 
     @State private var name = ""
     @State private var startingBalance = ""
-    @State private var currency = "HUF"
+    @State private var currency = CurrencyPreferences.load().defaultCode
 
     @State private var walletType = "Bank Account"
 
@@ -27,12 +28,15 @@ struct CreateWalletView: View {
     @State private var negativeBalanceLimit =
         ""
 
-    let currencies = [
-        "HUF",
-        "EUR",
-        "GBP",
-        "USD"
-    ]
+    private var currencies: [String] {
+        CurrencyPreferences.decode(storedCurrencyPreferences).enabledCodes
+    }
+
+    private func ensureAvailableCurrency() {
+        if !currencies.contains(currency) {
+            currency = CurrencyPreferences.decode(storedCurrencyPreferences).defaultCode
+        }
+    }
 
     let walletTypes = [
         "Cash",
@@ -105,9 +109,13 @@ struct CreateWalletView: View {
                             id: \.self
                         ) { currency in
 
-                            Text(currency)
+                            Text(currency).tag(currency)
                         }
                     }
+                }
+
+                Section {
+                    NavigationLink("Manage Currencies") { CurrenciesSettingsView() }
                 }
 
                 Section("Type") {
@@ -292,6 +300,9 @@ struct CreateWalletView: View {
                     }
                 }
             }
+
+            .onAppear(perform: ensureAvailableCurrency)
+            .onChange(of: storedCurrencyPreferences) { ensureAvailableCurrency() }
 
             .onChange(
                 of: walletType

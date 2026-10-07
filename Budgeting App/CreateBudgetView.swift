@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 
 struct CreateBudgetView: View {
+    @AppStorage(CurrencyPreferences.storageKey) private var storedCurrencyPreferences = CurrencyPreferences.defaultStorageValue
 
     @Environment(\.dismiss)
     private var dismiss
@@ -11,7 +12,7 @@ struct CreateBudgetView: View {
 
     @State private var name = ""
     @State private var amount = ""
-    @State private var currency = "HUF"
+    @State private var currency = CurrencyPreferences.load().defaultCode
 
     @State private var startDate = Date()
 
@@ -25,12 +26,15 @@ struct CreateBudgetView: View {
     @State private var isRecurring = false
     @State private var recurrenceType = "Monthly"
 
-    let currencies = [
-        "HUF",
-        "EUR",
-        "GBP",
-        "USD"
-    ]
+    @Query private var wallets: [Wallet]
+    @Query private var existingBudgets: [Budget]
+
+    private var currencies: [String] {
+        CurrencyPreferences.decode(storedCurrencyPreferences).budgetCodes(
+            existingCodes: wallets.map(\.currencyCode) + existingBudgets.map(\.currencyCode),
+            selectedCode: currency
+        )
+    }
 
     let recurrenceTypes = [
         "Monthly"
@@ -69,7 +73,7 @@ struct CreateBudgetView: View {
                             currencies,
                             id: \.self
                         ) {
-                            Text($0)
+                            Text($0).tag($0)
                         }
                     }
                 }
@@ -133,6 +137,11 @@ struct CreateBudgetView: View {
                 }
             }
 
+            .onChange(of: storedCurrencyPreferences) {
+                let preferences = CurrencyPreferences.decode(storedCurrencyPreferences)
+                let available = preferences.budgetCodes(existingCodes: wallets.map(\.currencyCode) + existingBudgets.map(\.currencyCode))
+                if !available.contains(currency) { currency = preferences.defaultCode }
+            }
             .navigationTitle("New Budget")
             .navigationBarTitleDisplayMode(.inline)
 

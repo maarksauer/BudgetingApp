@@ -12,7 +12,7 @@ struct ContentView: View {
             .alert("Backup Restored", isPresented: $showRestoreNotice) {
                 Button("OK", role: .cancel) { }
             } message: {
-                Text("Your data and appearance preference have been restored. The previous data is available under More → Backup & Restore → Before Last Restore.")
+                Text("Your backup has been restored. The previous data is available under More → Backup & Restore → Before Last Restore.")
             }
     }
 }

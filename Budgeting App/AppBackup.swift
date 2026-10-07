@@ -5,7 +5,7 @@ import SwiftData
 // the file boundary; IDs below link records within this particular backup.
 nonisolated enum AppBackup {
     static let format = "BudgetingAppBackup"
-    static let version = 1
+    static let version = 2
     static let maximumBytes = 32 * 1024 * 1024
     static let maximumRecords = 100_000
     static let restoreRevisionKey = "dataRestoreRevision"
@@ -33,6 +33,8 @@ nonisolated enum AppBackup {
         var transactions: [TransactionRecord]
         var transfers: [TransferRecord]
         var items: [ItemRecord]
+        // Version 1 files predate currency settings and omit this field.
+        var currencyPreferences: CurrencyPreferences? = nil
 
         var recordCount: Int {
             wallets.count + categories.count + subcategories.count + budgets.count +
@@ -172,8 +174,14 @@ nonisolated enum AppBackup {
         guard snapshot.format == format else {
             throw BackupError.invalid("Choose a Budgeting App backup JSON file.")
         }
-        guard snapshot.version == version else {
+        guard (1...version).contains(snapshot.version) else {
             throw BackupError.invalid("This backup version is not supported. Try the app version that created it.")
+        }
+        if snapshot.version >= 2 && snapshot.currencyPreferences == nil {
+            throw BackupError.invalid("This backup is missing its currency settings.")
+        }
+        if let preferences = snapshot.currencyPreferences, !preferences.isValid {
+            throw BackupError.invalid("The backup contains invalid currency settings.")
         }
         guard AppAppearance(rawValue: snapshot.appearance) != nil else {
             throw BackupError.invalid("The backup contains an unknown appearance preference.")
@@ -313,7 +321,7 @@ enum BackupStore {
         return id
     }
 
-    static func capture(context: ModelContext, appearance: AppAppearance, now: Date = .now) throws -> AppBackup.Snapshot {
+    static func capture(context: ModelContext, appearance: AppAppearance, currencyPreferences: CurrencyPreferences = .load(), now: Date = .now) throws -> AppBackup.Snapshot {
         try context.save()
         let wallets = try context.fetch(FetchDescriptor<Wallet>())
         let categories = try context.fetch(FetchDescriptor<SpendingCategory>())
@@ -367,7 +375,8 @@ enum BackupStore {
                     destinationWalletID: try id(transfer.destinationWallet, in: walletIDs), sourceCurrencyCode: transfer.sourceCurrencyCode,
                     destinationCurrencyCode: transfer.destinationCurrencyCode, createdAt: transfer.createdAt)
             },
-            items: items.map { AppBackup.ItemRecord(id: UUID(), timestamp: $0.timestamp) }
+            items: items.map { AppBackup.ItemRecord(id: UUID(), timestamp: $0.timestamp) },
+            currencyPreferences: currencyPreferences
         )
         try AppBackup.validate(snapshot)
         return snapshot

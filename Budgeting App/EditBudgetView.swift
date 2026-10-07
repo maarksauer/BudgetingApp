@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 
 struct EditBudgetView: View {
+    @AppStorage(CurrencyPreferences.storageKey) private var storedCurrencyPreferences = CurrencyPreferences.defaultStorageValue
 
     @Environment(\.dismiss)
     private var dismiss
@@ -22,12 +23,14 @@ struct EditBudgetView: View {
 
     @State private var showingSaveOptions = false
 
-    let currencies = [
-        "HUF",
-        "EUR",
-        "GBP",
-        "USD"
-    ]
+    @Query private var wallets: [Wallet]
+
+    private var currencies: [String] {
+        CurrencyPreferences.decode(storedCurrencyPreferences).budgetCodes(
+            existingCodes: wallets.map(\.currencyCode) + allBudgets.map(\.currencyCode),
+            selectedCode: currency
+        )
+    }
 
     let recurrenceTypes = [
         "Monthly"
@@ -97,7 +100,7 @@ struct EditBudgetView: View {
                             currencies,
                             id: \.self
                         ) {
-                            Text($0)
+                            Text($0).tag($0)
                         }
                     }
                 }

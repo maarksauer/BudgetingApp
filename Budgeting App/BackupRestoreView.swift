@@ -5,6 +5,7 @@ import Foundation
 
 struct BackupRestoreView: View {
     @Environment(\.modelContext) private var modelContext
+    @AppStorage(CurrencyPreferences.storageKey) private var storedCurrencyPreferences = CurrencyPreferences.defaultStorageValue
     @AppStorage(AppAppearance.storageKey) private var appearance: AppAppearance = .system
     @AppStorage(AppBackup.restoreRevisionKey) private var restoreRevision = ""
     @AppStorage(AppBackup.restoreNoticeKey) private var showRestoreNotice = false
@@ -22,7 +23,7 @@ struct BackupRestoreView: View {
     var body: some View {
         Form {
             Section {
-                Text("Save a complete backup of your wallets, transactions, transfers, categories, budgets, recurring payments, and appearance preference.")
+                Text("Save a complete backup of your wallets, transactions, transfers, categories, budgets, recurring payments, appearance preference, and currency settings.")
                     .foregroundStyle(.secondary)
                 Button(action: saveBackup) {
                     Label("Save Backup", systemImage: "square.and.arrow.down")
@@ -92,7 +93,8 @@ struct BackupRestoreView: View {
 
     private func saveBackup() {
         do {
-            let snapshot = try BackupStore.capture(context: modelContext, appearance: appearance)
+            let snapshot = try BackupStore.capture(context: modelContext, appearance: appearance,
+                                                   currencyPreferences: CurrencyPreferences.decode(storedCurrencyPreferences))
             document = BackupDocument(data: try AppBackup.encode(snapshot))
             exportFilename = AppBackup.filename(date: snapshot.createdAt)
             showingExporter = true
@@ -134,12 +136,16 @@ struct BackupRestoreView: View {
         requestedRestore = nil
         do {
             // Refuse replacement if we cannot first retain a complete recovery copy.
-            let current = try BackupStore.capture(context: modelContext, appearance: appearance)
+            let current = try BackupStore.capture(context: modelContext, appearance: appearance,
+                                                   currencyPreferences: CurrencyPreferences.decode(storedCurrencyPreferences))
             try AppBackup.encode(current).write(to: AppBackup.recoveryURL(), options: .atomic)
             try BackupStore.restore(snapshot, context: modelContext)
             // Preferences only change after the model save succeeds. Rebuild the
             // tab hierarchy to discard drafts and links to replaced model objects.
             appearance = AppAppearance(rawValue: snapshot.appearance) ?? .system
+            if let preferences = snapshot.currencyPreferences {
+                storedCurrencyPreferences = preferences.storageValue
+            }
             restoreRevision = UUID().uuidString
             showRestoreNotice = true
         } catch { report(error, title: "Couldn’t Restore Backup") }
@@ -179,6 +185,12 @@ private struct BackupPreviewView: View {
                     LabeledContent("File", value: preview.name)
                     LabeledContent("Created", value: snapshot.createdAt.formatted(date: .abbreviated, time: .shortened))
                     LabeledContent("Appearance", value: AppAppearance(rawValue: snapshot.appearance)?.title ?? "System")
+                    if let preferences = snapshot.currencyPreferences {
+                        LabeledContent("Enabled Currencies", value: preferences.enabledCodes.joined(separator: ", "))
+                        LabeledContent("Default Currency", value: preferences.defaultCode)
+                    } else {
+                        LabeledContent("Currency Settings", value: "Not included; current settings kept")
+                    }
                 }
                 Section("Contents") {
                     LabeledContent("Wallets", value: "\(snapshot.wallets.count)")

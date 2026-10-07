@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SettingsView: View {
+    @AppStorage(CurrencyPreferences.storageKey) private var storedCurrencyPreferences = CurrencyPreferences.defaultStorageValue
     @AppStorage(AppAppearance.storageKey) private var appearance: AppAppearance = .system
 
     var body: some View {
@@ -37,11 +38,17 @@ struct SettingsView: View {
                         )
                     }
 
-                    Label(
-                        "Currencies",
-                        systemImage:
-                            "eurosign.circle"
-                    )
+                    NavigationLink {
+                        CurrenciesSettingsView()
+                    } label: {
+                        HStack {
+                            Label("Currencies", systemImage: "eurosign.circle")
+                            Spacer()
+                            Text("\(CurrencyPreferences.decode(storedCurrencyPreferences).enabledCodes.count) enabled")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .accessibilityIdentifier("openCurrenciesSettings")
                 }
 
                 Section("Preferences") {

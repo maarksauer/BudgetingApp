@@ -568,7 +568,7 @@ final class BudgetingAppTests: XCTestCase {
         let valid = try BackupStore.capture(context: source, appearance: .system)
         var invalid: [AppBackup.Snapshot] = []
         var sample = valid; sample.format = "AnotherApp"; invalid.append(sample)
-        sample = valid; sample.version = 2; invalid.append(sample)
+        sample = valid; sample.version = 3; invalid.append(sample)
         sample = valid; sample.appearance = "Unknown"; invalid.append(sample)
         sample = valid; sample.wallets.append(sample.wallets[0]); invalid.append(sample)
         sample = valid; sample.transactions[0].walletID = UUID(); invalid.append(sample)
@@ -672,6 +672,60 @@ final class BudgetingAppTests: XCTestCase {
         XCTAssertFalse(wallets.contains { $0.name == "Old wallet" })
         XCTAssertEqual(restored.budgets.first?.seriesID, snapshot.budgets.first?.seriesID)
         XCTAssertNotNil(restored.transactions.first { $0.recurringPaymentID != nil })
+    }
+
+    @MainActor
+    func testCurrencySettingsSurviveBackupAndVersionOneBackupsStillRestore() throws {
+        let source = try backupContext()
+        try populateBackupFixture(source)
+        let preferences = CurrencyPreferences(enabledCodes: ["JPY", "EUR"], defaultCode: "JPY")
+        let captured = try BackupStore.capture(context: source, appearance: .dark, currencyPreferences: preferences)
+        let decoded = try AppBackup.decode(AppBackup.encode(captured))
+        XCTAssertEqual(decoded.version, 2)
+        XCTAssertEqual(decoded.currencyPreferences, preferences)
+        XCTAssertEqual(CurrencyPreferences.decode(try XCTUnwrap(decoded.currencyPreferences).storageValue), preferences)
+
+        // Actual version-1 JSON has no currency settings key. Optional decoding
+        // must retain that absence so the UI can leave current preferences intact.
+        var legacyJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: AppBackup.encode(captured)) as? [String: Any])
+        legacyJSON["version"] = 1
+        legacyJSON.removeValue(forKey: "currencyPreferences")
+        let legacy = try AppBackup.decode(JSONSerialization.data(withJSONObject: legacyJSON))
+        XCTAssertEqual(legacy.version, 1)
+        XCTAssertNil(legacy.currencyPreferences)
+        let target = try backupContext()
+        try BackupStore.restore(legacy, context: target)
+        let restored = try target.fetch(FetchDescriptor<Wallet>())
+        XCTAssertEqual(Set(restored.map(\.currencyCode)), Set(["EUR", "USD"]))
+        XCTAssertEqual(try BackupStore.capture(context: target, appearance: .dark, currencyPreferences: preferences).recordCount,
+                       captured.recordCount)
+    }
+
+    @MainActor
+    func testInvalidBackupCurrencyPreferencesDoNotReplaceExistingData() throws {
+        let context = try backupContext()
+        try populateBackupFixture(context)
+        let valid = try BackupStore.capture(context: context, appearance: .system, currencyPreferences: .defaults)
+        let invalidSettings: [CurrencyPreferences?] = [
+            nil,
+            CurrencyPreferences(enabledCodes: [], defaultCode: "HUF"),
+            CurrencyPreferences(enabledCodes: ["EUR", "EUR"], defaultCode: "EUR"),
+            CurrencyPreferences(enabledCodes: ["EUR"], defaultCode: "HUF"),
+            CurrencyPreferences(enabledCodes: ["eur"], defaultCode: "eur"),
+            CurrencyPreferences(enabledCodes: ["EURO"], defaultCode: "EURO")
+        ]
+        for preferences in invalidSettings {
+            var invalid = valid
+            invalid.currencyPreferences = preferences
+            XCTAssertThrowsError(try AppBackup.encode(invalid))
+            XCTAssertThrowsError(try BackupStore.restore(invalid, context: context))
+            XCTAssertFalse(context.hasChanges)
+            XCTAssertEqual(try context.fetch(FetchDescriptor<Wallet>()).count, 2)
+            XCTAssertEqual(try context.fetch(FetchDescriptor<ExpenseTransaction>()).count, 3)
+        }
+        var incompleteJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: AppBackup.encode(valid)) as? [String: Any])
+        incompleteJSON.removeValue(forKey: "currencyPreferences")
+        XCTAssertThrowsError(try AppBackup.decode(JSONSerialization.data(withJSONObject: incompleteJSON)))
     }
 
     @MainActor

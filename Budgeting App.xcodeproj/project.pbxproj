@@ -52,6 +52,8 @@
 		E9D3E69B1096DE80155602E9 /* AppearanceSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C1881FCA23D09D8A3C14330 /* AppearanceSettingsView.swift */; };
 		6961251915728EA9B1AEDF12 /* AppBackup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D2FD26DF3977AF02BE6A3EC /* AppBackup.swift */; };
 		4AAF2AC39FA9EA2ABB2FFB0E /* BackupRestoreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFE85085ED1E24B903C5D2A1 /* BackupRestoreView.swift */; };
+		1E440F5B469981E796642F50 /* CurrencyPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C0D61707342A294760D115D /* CurrencyPreferences.swift */; };
+		51F5DDB89358F7D438F0D6FC /* CurrenciesSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70429AD9EF733B50D58FAD3F /* CurrenciesSettingsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -122,6 +124,8 @@
 		2C1881FCA23D09D8A3C14330 /* AppearanceSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearanceSettingsView.swift; sourceTree = "<group>"; };
 		7D2FD26DF3977AF02BE6A3EC /* AppBackup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBackup.swift; sourceTree = "<group>"; };
 		CFE85085ED1E24B903C5D2A1 /* BackupRestoreView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupRestoreView.swift; sourceTree = "<group>"; };
+		0C0D61707342A294760D115D /* CurrencyPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrencyPreferences.swift; sourceTree = "<group>"; };
+		70429AD9EF733B50D58FAD3F /* CurrenciesSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrenciesSettingsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -201,6 +205,8 @@
 				2C1881FCA23D09D8A3C14330 /* AppearanceSettingsView.swift */,
 				7D2FD26DF3977AF02BE6A3EC /* AppBackup.swift */,
 				CFE85085ED1E24B903C5D2A1 /* BackupRestoreView.swift */,
+				0C0D61707342A294760D115D /* CurrencyPreferences.swift */,
+				70429AD9EF733B50D58FAD3F /* CurrenciesSettingsView.swift */,
 				86E929B6305D850700AF8F5C /* SettingsView.swift */,
 				86E929B7305D850700AF8F5C /* SpendingCategory.swift */,
 				86E929B8305D850700AF8F5C /* SpendingSubcategory.swift */,
@@ -404,6 +410,8 @@
 				E9D3E69B1096DE80155602E9 /* AppearanceSettingsView.swift in Sources */,
 				6961251915728EA9B1AEDF12 /* AppBackup.swift in Sources */,
 				4AAF2AC39FA9EA2ABB2FFB0E /* BackupRestoreView.swift in Sources */,
+				1E440F5B469981E796642F50 /* CurrencyPreferences.swift in Sources */,
+				51F5DDB89358F7D438F0D6FC /* CurrenciesSettingsView.swift in Sources */,
 				DFBA2814FFBEE2FFA7166EB9 /* SettingsView.swift in Sources */,
 				AE303135B425D7B2F2E393F3 /* SpendingCategory.swift in Sources */,
 				17EDA502EA16BFF71E5FE3EE /* SpendingSubcategory.swift in Sources */,
