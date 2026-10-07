@@ -42,6 +42,8 @@ xcodebuild -project "Budgeting App.xcodeproj" -scheme "Budgeting App" \
   -derivedDataPath /tmp/budgeting-app-derived test
 ```
 
-The scheme includes four unit tests for wallet balances, overdraft limits, recurring-payment rescheduling, and paused payments, plus a UI test that launches the app and opens Wallets. Run the UI test on an iPhone simulator, where the tab bar is visible. Test sources belong only to their test targets; app sources and assets belong only to the app target. `Info.plist` is processed as build configuration, not copied as a resource.
+The scheme includes four unit tests for wallet balances, overdraft limits, recurring-payment rescheduling, and paused payments, plus three UI tests covering launch/navigation and keyboard dismissal on Add Expense. Run the UI tests on an iPhone simulator with the software keyboard enabled, where the tab bar is visible. Test sources belong only to their test targets; app sources and assets belong only to the app target. `Info.plist` is processed as build configuration, not copied as a resource.
+
+On Add Expense, use **Done** above the keyboard or drag the form to dismiss it. The note field's Done/Return key also dismisses the keyboard. Dismissing preserves the entered amount and note. Check this with no wallet configured as well as with a valid expense draft, and verify that you can open another tab afterward without creating a transaction.
 
 For a physical device or distribution, configure your own signing team in Xcode. Build and test commands above still need validation on macOS; Linux checks only establish project structure and file-reference integrity.

@@ -28,6 +28,13 @@ struct AddExpenseView: View {
 
     @State private var showingSavedConfirmation = false
 
+    private enum Field: Hashable {
+        case amount
+        case note
+    }
+
+    @FocusState private var focusedField: Field?
+
     var body: some View {
 
         NavigationStack {
@@ -42,7 +49,11 @@ struct AddExpenseView: View {
                         "Amount",
                         text: $amount
                     )
+                    .focused($focusedField, equals: .amount)
+                    .accessibilityIdentifier("expenseAmount")
+                    #if os(iOS) || os(visionOS)
                     .keyboardType(.decimalPad)
+                    #endif
 
                     if !amount.isEmpty &&
                         parsedAmount == nil {
@@ -65,6 +76,9 @@ struct AddExpenseView: View {
                         "Note",
                         text: $note
                     )
+                    .focused($focusedField, equals: .note)
+                    .submitLabel(.done)
+                    .accessibilityIdentifier("expenseNote")
                 }
 
                 // MARK: - Wallet
@@ -298,6 +312,25 @@ struct AddExpenseView: View {
                 }
             }
 
+            .scrollDismissesKeyboard(.interactively)
+            .onSubmit {
+                focusedField = nil
+            }
+
+            #if os(iOS) || os(visionOS)
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    if focusedField != nil {
+                        Spacer()
+                        Button("Done") {
+                            focusedField = nil
+                        }
+                        .accessibilityIdentifier("dismissExpenseKeyboard")
+                    }
+                }
+            }
+            #endif
+
             .navigationTitle(
                 "Add Expense"
             )
@@ -307,6 +340,10 @@ struct AddExpenseView: View {
                 createDefaultCategoriesIfNeeded()
 
                 setDefaultSelections()
+            }
+
+            .onDisappear {
+                focusedField = nil
             }
 
             .alert(
@@ -578,6 +615,8 @@ struct AddExpenseView: View {
         modelContext.insert(
             transaction
         )
+
+        focusedField = nil
 
         amount = ""
         note = ""
