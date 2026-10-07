@@ -44,6 +44,9 @@
 		FB4B0F838666CF894F1E44B6 /* AddExpenseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86E929A1305D850700AF8F5C /* AddExpenseView.swift */; };
 		FEB1DBB6B39EC0EFFA21AA78 /* RecurringPayment.swift in Sources */ = {isa = PBXBuildFile; fileRef = B16006BC18DFD93325B76ED6 /* RecurringPayment.swift */; };
 		FF38BD02DF3E67AC8F15E596 /* EditBudgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86E929AD305D850700AF8F5C /* EditBudgetView.swift */; };
+		0715FCA33F4800A034ACBF53 /* DashboardMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74B501BF25E0A3576CC4DEF3 /* DashboardMetrics.swift */; };
+		6D9C454986012309DFC5C64C /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1260DDDD1F9988E9054CE7E /* DashboardView.swift */; };
+		CA5ECC8955EAC5026D216230 /* BudgetSchedule.swift in Sources */ = {isa = PBXBuildFile; fileRef = C77EDF399F8AE3B39232C95F /* BudgetSchedule.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -106,6 +109,9 @@
 		86E929C5305D850700AF8F5C /* BudgetingAppUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BudgetingAppUITests.swift; sourceTree = "<group>"; };
 		A278A198C40FAE189E8DF0C0 /* RecurringPaymentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurringPaymentsView.swift; sourceTree = "<group>"; };
 		B16006BC18DFD93325B76ED6 /* RecurringPayment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurringPayment.swift; sourceTree = "<group>"; };
+		74B501BF25E0A3576CC4DEF3 /* DashboardMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardMetrics.swift; sourceTree = "<group>"; };
+		F1260DDDD1F9988E9054CE7E /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
+		C77EDF399F8AE3B39232C95F /* BudgetSchedule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BudgetSchedule.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -156,6 +162,9 @@
 		86E929C1305D850700AF8F5C /* Budgeting App */ = {
 			isa = PBXGroup;
 			children = (
+				C77EDF399F8AE3B39232C95F /* BudgetSchedule.swift */,
+				F1260DDDD1F9988E9054CE7E /* DashboardView.swift */,
+				74B501BF25E0A3576CC4DEF3 /* DashboardMetrics.swift */,
 				86E929A1305D850700AF8F5C /* AddExpenseView.swift */,
 				86E929A2305D850700AF8F5C /* Assets.xcassets */,
 				86E929A3305D850700AF8F5C /* Budget.swift */,
@@ -349,6 +358,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CA5ECC8955EAC5026D216230 /* BudgetSchedule.swift in Sources */,
+				6D9C454986012309DFC5C64C /* DashboardView.swift in Sources */,
+				0715FCA33F4800A034ACBF53 /* DashboardMetrics.swift in Sources */,
 				FB4B0F838666CF894F1E44B6 /* AddExpenseView.swift in Sources */,
 				87F7F697162DB88818AB36F6 /* Budget.swift in Sources */,
 				C0AEC4F57D2AFC754520D21E /* BudgetDetailView.swift in Sources */,

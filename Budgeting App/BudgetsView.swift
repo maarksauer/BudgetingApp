@@ -14,6 +14,7 @@ struct BudgetsView: View {
 
     @State private var showingCreateBudget = false
     @State private var showingPastBudgets = false
+    @State private var showingBudgetUpdateError = false
 
     var body: some View {
 
@@ -83,6 +84,12 @@ struct BudgetsView: View {
 
             .onAppear {
                 generateRecurringBudgetsIfNeeded()
+            }
+            .alert("Couldn’t update recurring budgets", isPresented: $showingBudgetUpdateError) {
+                Button("Try Again") { generateRecurringBudgetsIfNeeded() }
+                Button("Close", role: .cancel) { }
+            } message: {
+                Text("Your saved budgets are still available. Try again to create the current recurring periods.")
             }
         }
     }
@@ -547,156 +554,11 @@ struct BudgetsView: View {
     // MARK: - Recurring Budgets
 
     private func generateRecurringBudgetsIfNeeded() {
-
-        let calendar =
-            Calendar.current
-
-        let today =
-            calendar.startOfDay(
-                for: Date()
-            )
-
-        let recurringBudgets =
-            budgets.filter {
-                $0.isRecurring &&
-                $0.recurrenceType == "Monthly"
-            }
-
-        let seriesIDs =
-            Set(
-                recurringBudgets.map {
-                    $0.seriesID
-                }
-            )
-
-        for seriesID in seriesIDs {
-
-            let seriesBudgets =
-                budgets
-                    .filter {
-                        $0.seriesID == seriesID
-                    }
-                    .sorted {
-                        $0.startDate <
-                        $1.startDate
-                    }
-
-            guard
-                var latestBudget =
-                    seriesBudgets.last
-            else {
-                continue
-            }
-
-            guard
-                latestBudget.isRecurring
-            else {
-                continue
-            }
-
-            var latestEndDate =
-                calendar.startOfDay(
-                    for:
-                        latestBudget.endDate
-                )
-
-            while latestEndDate < today {
-
-                guard
-                    let nextBudget =
-                        makeNextMonthlyBudget(
-                            from:
-                                latestBudget
-                        )
-                else {
-                    break
-                }
-
-                modelContext.insert(
-                    nextBudget
-                )
-
-                latestBudget =
-                    nextBudget
-
-                latestEndDate =
-                    calendar.startOfDay(
-                        for:
-                            nextBudget.endDate
-                    )
-            }
+        do {
+            try BudgetSchedule.generateIfNeeded(context: modelContext)
+        } catch {
+            showingBudgetUpdateError = true
         }
-    }
-
-    private func makeNextMonthlyBudget(
-        from budget: Budget
-    ) -> Budget? {
-
-        let calendar =
-            Calendar.current
-
-        guard
-            let nextStart =
-                calendar.date(
-                    byAdding: .day,
-                    value: 1,
-                    to:
-                        calendar.startOfDay(
-                            for:
-                                budget.endDate
-                        )
-                )
-        else {
-            return nil
-        }
-
-        guard
-            let monthAfterNextStart =
-                calendar.date(
-                    byAdding: .month,
-                    value: 1,
-                    to: nextStart
-                )
-        else {
-            return nil
-        }
-
-        guard
-            let nextEnd =
-                calendar.date(
-                    byAdding: .day,
-                    value: -1,
-                    to:
-                        monthAfterNextStart
-                )
-        else {
-            return nil
-        }
-
-        let nextBudget =
-            Budget(
-                name:
-                    budget.name,
-                totalAmount:
-                    budget.totalAmount,
-                currencyCode:
-                    budget.currencyCode,
-                startDate:
-                    nextStart,
-                endDate:
-                    nextEnd,
-                isRecurring:
-                    true,
-                recurrenceType:
-                    budget.recurrenceType,
-                seriesID:
-                    budget.seriesID
-            )
-
-        nextBudget.categories =
-            budget.categories
-
-        return nextBudget
     }
 
     // MARK: - Spending Calculation

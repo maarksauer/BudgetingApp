@@ -3,15 +3,21 @@ import Foundation
 
 final class BudgetingAppUITests: XCTestCase {
     @MainActor
-    func testLaunchAndOpenWallets() {
+    func testLaunchDashboardAndAddExpenseFromWallets() {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launch()
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
+        XCTAssertTrue(app.navigationBars["Home"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Spent this month"].exists)
 
         let walletsTab = app.tabBars.buttons["Wallets"]
         XCTAssertTrue(walletsTab.waitForExistence(timeout: 10))
         walletsTab.tap()
+        XCTAssertTrue(app.navigationBars["Wallets"].waitForExistence(timeout: 5))
+        openAddExpense(in: app)
+        XCTAssertTrue(app.navigationBars["Add Expense"].waitForExistence(timeout: 5))
+        app.buttons["closeAddExpense"].tap()
         XCTAssertTrue(app.navigationBars["Wallets"].waitForExistence(timeout: 5))
     }
 
@@ -20,6 +26,7 @@ final class BudgetingAppUITests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launch()
+        openAddExpense(in: app)
 
         let amount = app.textFields["expenseAmount"]
         XCTAssertTrue(amount.waitForExistence(timeout: 10))
@@ -36,9 +43,11 @@ final class BudgetingAppUITests: XCTestCase {
         XCTAssertEqual(amount.value as? String, "123")
         XCTAssertFalse(app.alerts["Expense Added"].exists)
 
+        app.buttons["closeAddExpense"].tap()
+        XCTAssertTrue(app.navigationBars["Home"].waitForExistence(timeout: 5))
         app.tabBars.buttons["Wallets"].tap()
         XCTAssertTrue(app.navigationBars["Wallets"].waitForExistence(timeout: 5))
-        app.tabBars.buttons["Add"].tap()
+        openAddExpense(in: app)
         XCTAssertTrue(amount.waitForExistence(timeout: 5))
         XCTAssertEqual(amount.value as? String, "123")
         XCTAssertEqual(note.value as? String, "Unfinished expense")
@@ -50,6 +59,7 @@ final class BudgetingAppUITests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launch()
+        openAddExpense(in: app)
 
         let note = app.textFields["expenseNote"]
         XCTAssertTrue(note.waitForExistence(timeout: 10))
@@ -58,6 +68,13 @@ final class BudgetingAppUITests: XCTestCase {
         assertKeyboardHidden(in: app)
         XCTAssertEqual(note.value as? String, "Draft note")
         XCTAssertFalse(app.alerts["Expense Added"].exists)
+    }
+
+    @MainActor
+    private func openAddExpense(in app: XCUIApplication) {
+        let add = app.buttons["openAddExpense"].firstMatch
+        XCTAssertTrue(add.waitForExistence(timeout: 10))
+        add.tap()
     }
 
     @MainActor

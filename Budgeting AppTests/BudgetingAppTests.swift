@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 import XCTest
 @testable import BudgetingApp
 
@@ -46,5 +47,133 @@ final class BudgetingAppTests: XCTestCase {
         let payment = RecurringPayment(name: "Subscription", amount: 10, frequency: "Monthly", nextPaymentDate: .distantPast, isActive: false)
         XCTAssertFalse(payment.isDue)
         XCTAssertEqual(payment.statusText, "Paused")
+    }
+
+    @MainActor
+    func testMonthlySpendingKeepsCurrenciesSeparateAndExcludesOtherDates() {
+        let eur = Wallet(name: "Euro", startingBalance: 0, currencyCode: "EUR", walletType: "Cash")
+        let huf = Wallet(name: "Forint", startingBalance: 0, currencyCode: "HUF", walletType: "Cash")
+        let gbp = Wallet(name: "Pounds", startingBalance: 0, currencyCode: "GBP", walletType: "Cash")
+        let transactions = [
+            ExpenseTransaction(amount: Decimal(string: "12.30")!, date: date(2026, 10, 1), wallet: eur),
+            ExpenseTransaction(amount: Decimal(string: "7.45")!, date: date(2026, 10, 7), wallet: eur),
+            ExpenseTransaction(amount: 1500, date: date(2026, 10, 3), wallet: huf),
+            ExpenseTransaction(amount: 99, date: date(2026, 9, 30), wallet: eur),
+            ExpenseTransaction(amount: 44, date: date(2026, 10, 8), wallet: eur),
+            ExpenseTransaction(amount: 5000, date: date(2026, 11, 1), wallet: huf),
+            ExpenseTransaction(amount: 100, date: date(2026, 10, 2))
+        ]
+
+        let totals = DashboardMetrics.monthlySpending(
+            transactions: transactions, wallets: [eur, huf, gbp],
+            now: date(2026, 10, 7, hour: 12), calendar: utcCalendar
+        )
+        XCTAssertEqual(totals.map(\.currencyCode), ["EUR", "GBP", "HUF"])
+        XCTAssertEqual(totals.map(\.amount), [Decimal(string: "19.75")!, 0, 1500])
+    }
+
+    @MainActor
+    func testDashboardWalletBalanceUsesEachSideOfTransfers() {
+        let eur = Wallet(name: "Euro", startingBalance: 100, currencyCode: "EUR", walletType: "Cash")
+        let other = Wallet(name: "Other", startingBalance: 0, currencyCode: "EUR", walletType: "Cash")
+        let usd = Wallet(name: "Dollar", startingBalance: 100, currencyCode: "USD", walletType: "Cash")
+        eur.transactions = [ExpenseTransaction(amount: Decimal(string: "12.30")!, wallet: eur)]
+        let transfers = [
+            WalletTransfer(sourceAmount: 20, destinationAmount: 20, sourceWallet: eur, destinationWallet: other),
+            WalletTransfer(sourceAmount: 10, destinationAmount: Decimal(string: "7.25")!, sourceWallet: usd, destinationWallet: eur),
+            WalletTransfer(sourceAmount: 50, destinationAmount: 45, sourceWallet: usd, destinationWallet: other)
+        ]
+
+        XCTAssertEqual(DashboardMetrics.balance(for: eur, transfers: transfers), Decimal(string: "74.95")!)
+    }
+
+    @MainActor
+    func testDashboardBudgetMatchesCategoryCurrencyAndEntireEndDay() {
+        let food = SpendingCategory(name: "Food", icon: "fork.knife", colorName: "orange")
+        let travel = SpendingCategory(name: "Travel", icon: "car", colorName: "blue")
+        let eur = Wallet(name: "Euro", startingBalance: 1000, currencyCode: "EUR", walletType: "Cash")
+        let huf = Wallet(name: "Forint", startingBalance: 10000, currencyCode: "HUF", walletType: "Cash")
+        let budget = Budget(name: "Food", totalAmount: 100, currencyCode: "EUR",
+                            startDate: date(2026, 10, 1), endDate: date(2026, 10, 7))
+        budget.categories = [food]
+        let transactions = [
+            ExpenseTransaction(amount: Decimal(string: "0.05")!, date: date(2026, 10, 1), wallet: eur, category: food),
+            ExpenseTransaction(amount: 120, date: date(2026, 10, 7, hour: 23, minute: 59), wallet: eur, category: food),
+            ExpenseTransaction(amount: 30, date: date(2026, 10, 4), wallet: eur, category: travel),
+            ExpenseTransaction(amount: 200, date: date(2026, 10, 4), wallet: huf, category: food),
+            ExpenseTransaction(amount: 50, date: date(2026, 9, 30), wallet: eur, category: food),
+            ExpenseTransaction(amount: 60, date: date(2026, 10, 8), wallet: eur, category: food),
+            ExpenseTransaction(amount: 70, date: date(2026, 10, 4), category: food),
+            ExpenseTransaction(amount: 80, date: date(2026, 10, 4), wallet: eur)
+        ]
+
+        XCTAssertEqual(DashboardMetrics.spent(for: budget, transactions: transactions, calendar: utcCalendar),
+                       Decimal(string: "120.05")!)
+        XCTAssertEqual(DashboardMetrics.currentBudgets([budget], now: date(2026, 10, 7, hour: 23), calendar: utcCalendar).count, 1)
+        XCTAssertTrue(DashboardMetrics.currentBudgets([budget], now: date(2026, 10, 8), calendar: utcCalendar).isEmpty)
+    }
+
+    @MainActor
+    func testDashboardBillsRespectPostponementAndExcludePausedPayments() {
+        let overdue = RecurringPayment(name: "Rent", amount: 500, frequency: "Monthly", nextPaymentDate: date(2026, 10, 1))
+        let upcoming = RecurringPayment(name: "Internet", amount: 20, frequency: "Monthly", nextPaymentDate: date(2026, 10, 9))
+        let postponed = RecurringPayment(name: "Insurance", amount: 30, frequency: "Monthly", nextPaymentDate: date(2026, 9, 29))
+        postponed.postponedUntil = date(2026, 10, 20)
+        let paused = RecurringPayment(name: "Paused", amount: 10, frequency: "Monthly", nextPaymentDate: .distantPast, isActive: false)
+
+        XCTAssertEqual(DashboardMetrics.nextPayments([postponed, paused, upcoming, overdue]).map(\.name),
+                       ["Rent", "Internet", "Insurance"])
+    }
+
+    @MainActor
+    func testRecurringBudgetsCatchUpAcrossShortMonthsWithoutDuplicates() {
+        let budget = Budget(name: "Monthly", totalAmount: 250, currencyCode: "EUR",
+                            startDate: date(2026, 1, 1), endDate: date(2026, 1, 31), isRecurring: true)
+        let category = SpendingCategory(name: "Food", icon: "fork.knife", colorName: "orange")
+        budget.categories = [category]
+        let now = date(2026, 3, 2)
+        let generated = BudgetSchedule.missingMonthlyBudgets(from: [budget], through: now, calendar: utcCalendar)
+
+        XCTAssertEqual(generated.count, 2)
+        XCTAssertEqual(generated.map(\.startDate), [date(2026, 2, 1), date(2026, 3, 1)])
+        XCTAssertEqual(generated.map(\.endDate), [date(2026, 2, 28), date(2026, 3, 31)])
+        XCTAssertTrue(generated.allSatisfy {
+            $0.seriesID == budget.seriesID && $0.totalAmount == 250 && $0.currencyCode == "EUR" &&
+                $0.categories.first?.persistentModelID == category.persistentModelID
+        })
+        XCTAssertTrue(BudgetSchedule.missingMonthlyBudgets(from: [budget] + generated, through: now, calendar: utcCalendar).isEmpty)
+        generated.last?.isRecurring = false
+        XCTAssertTrue(BudgetSchedule.missingMonthlyBudgets(from: [budget] + generated, through: date(2026, 4, 2), calendar: utcCalendar).isEmpty)
+    }
+
+    @MainActor
+    func testRecurringBudgetRefreshIncludesPendingPeriodsFromAnotherScreen() throws {
+        let schema = Schema([
+            Item.self, Wallet.self, ExpenseTransaction.self, SpendingCategory.self,
+            SpendingSubcategory.self, Budget.self, WalletTransfer.self, RecurringPayment.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+        let budget = Budget(name: "Monthly", totalAmount: 250, currencyCode: "EUR",
+                            startDate: date(2026, 1, 1), endDate: date(2026, 1, 31), isRecurring: true)
+        context.insert(budget)
+
+        try BudgetSchedule.generateIfNeeded(context: context, now: date(2026, 3, 2), calendar: utcCalendar)
+        try BudgetSchedule.generateIfNeeded(context: context, now: date(2026, 3, 2), calendar: utcCalendar)
+
+        let periods = try context.fetch(FetchDescriptor<Budget>())
+        XCTAssertEqual(periods.count, 3)
+        XCTAssertEqual(Set(periods.map(\.startDate)).count, 3)
+    }
+
+    private var utcCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        return calendar
+    }
+
+    private func date(_ year: Int, _ month: Int, _ day: Int, hour: Int = 0, minute: Int = 0) -> Date {
+        utcCalendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour, minute: minute))!
     }
 }

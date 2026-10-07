@@ -1,6 +1,15 @@
 import SwiftUI
 import SwiftData
 
+struct ExpenseDraft {
+    var amount = ""
+    var note = ""
+    var transactionDate = Date()
+    var selectedWallet: Wallet?
+    var selectedCategory: SpendingCategory?
+    var selectedSubcategoryID: PersistentIdentifier?
+}
+
 struct AddExpenseView: View {
 
     @Environment(\.modelContext)
@@ -15,16 +24,16 @@ struct AddExpenseView: View {
     @Query
     private var transfers: [WalletTransfer]
 
-    @State private var amount = ""
-    @State private var note = ""
-    @State private var transactionDate = Date()
+    @Binding private var amount: String
+    @Binding private var note: String
+    @Binding private var transactionDate: Date
 
-    @State private var selectedWallet: Wallet?
-    @State private var selectedCategory: SpendingCategory?
+    @Binding private var selectedWallet: Wallet?
+    @Binding private var selectedCategory: SpendingCategory?
 
     // We store the model ID instead of the model object
     // because Picker requires a Hashable selection.
-    @State private var selectedSubcategoryID: PersistentIdentifier?
+    @Binding private var selectedSubcategoryID: PersistentIdentifier?
 
     @State private var showingSavedConfirmation = false
 
@@ -34,6 +43,18 @@ struct AddExpenseView: View {
     }
 
     @FocusState private var focusedField: Field?
+
+    private let onClose: () -> Void
+
+    init(draft: Binding<ExpenseDraft>, onClose: @escaping () -> Void) {
+        _amount = draft.amount
+        _note = draft.note
+        _transactionDate = draft.transactionDate
+        _selectedWallet = draft.selectedWallet
+        _selectedCategory = draft.selectedCategory
+        _selectedSubcategoryID = draft.selectedSubcategoryID
+        self.onClose = onClose
+    }
 
     var body: some View {
 
@@ -335,6 +356,16 @@ struct AddExpenseView: View {
                 "Add Expense"
             )
 
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") {
+                        focusedField = nil
+                        onClose()
+                    }
+                    .accessibilityIdentifier("closeAddExpense")
+                }
+            }
+
             .onAppear {
 
                 createDefaultCategoriesIfNeeded()
@@ -558,16 +589,18 @@ struct AddExpenseView: View {
 
     private func setDefaultSelections() {
 
-        if selectedWallet == nil {
+        if !wallets.contains(where: { $0.persistentModelID == selectedWallet?.persistentModelID }) {
 
             selectedWallet =
                 wallets.first
         }
 
-        if selectedCategory == nil {
+        if !categories.contains(where: { $0.persistentModelID == selectedCategory?.persistentModelID }) {
 
             selectedCategory =
                 categories.first
+
+            selectedSubcategoryID = nil
         }
     }
 
