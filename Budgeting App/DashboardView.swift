@@ -27,6 +27,8 @@ struct DashboardView: View {
                         monthlySpendingCard(now: timeline.date)
                         monthlyIncomeCard(now: timeline.date)
                         walletSection
+                        recentActivitySection(now: timeline.date)
+                        categorySpendingSection(now: timeline.date)
                         budgetSection(now: timeline.date)
                         paymentSection(now: timeline.date)
                     }
@@ -240,6 +242,190 @@ struct DashboardView: View {
                     }
                     .buttonStyle(.plain)
                 }
+            }
+        }
+    }
+
+    private func recentActivitySection(now: Date) -> some View {
+        let recent = DashboardMetrics.recentActivity(
+            transactions: transactions, transfers: transfers, now: now
+        )
+        return VStack(alignment: .leading, spacing: 12) {
+            sectionHeading("Recent transactions", action: openTransactions)
+            DashboardCard {
+                if recent.isEmpty {
+                    Text("Your income, expenses, and transfers will appear here.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    VStack(spacing: 16) {
+                        ForEach(recent) { activity in
+                            recentActivityLink(activity)
+                        }
+                    }
+                }
+            }
+        }
+        .accessibilityIdentifier("recentTransactionsSection")
+    }
+
+    @ViewBuilder
+    private func recentActivityLink(_ activity: DashboardMetrics.RecentActivity) -> some View {
+        switch activity {
+        case .transaction(let transaction):
+            NavigationLink {
+                TransactionDetailView(transaction: transaction)
+            } label: {
+                recentTransactionRow(transaction)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("recentTransactionLink")
+        case .transfer(let transfer):
+            NavigationLink {
+                TransferDetailView(transfer: transfer)
+            } label: {
+                recentTransferRow(transfer)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("recentTransferLink")
+        }
+    }
+
+    private func recentTransactionRow(_ transaction: ExpenseTransaction) -> some View {
+        let note = transaction.note.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = note.isEmpty
+            ? (transaction.isIncome ? "Income" : transaction.subcategory?.name ?? transaction.category?.name ?? "Expense")
+            : note
+        let tint = transaction.isIncome ? Color.green : color(named: transaction.category?.colorName ?? "gray")
+        return HStack(alignment: .top, spacing: 12) {
+            Image(systemName: transaction.isIncome ? "arrow.down.left" : transaction.category?.icon ?? "tag")
+                .foregroundStyle(tint)
+                .frame(width: 36, height: 36)
+                .background(tint.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).fontWeight(.medium)
+                Text("\(transaction.typeName) · \(transaction.wallet?.name ?? "No wallet")")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(transaction.date.formatted(date: .abbreviated, time: .omitted))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            VStack(alignment: .trailing, spacing: 4) {
+                if let wallet = transaction.wallet {
+                    Text("\(transaction.amountSign)\(transaction.amount.formatted(.currency(code: wallet.currencyCode)))")
+                } else {
+                    Text("\(transaction.amountSign)\(transaction.amount.formatted(.number))")
+                }
+            }
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(transaction.isIncome ? Color.green : Color.primary)
+            .monospacedDigit()
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func recentTransferRow(_ transfer: WalletTransfer) -> some View {
+        let note = transfer.note.trimmingCharacters(in: .whitespacesAndNewlines)
+        return HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "arrow.left.arrow.right")
+                .foregroundStyle(.blue)
+                .frame(width: 36, height: 36)
+                .background(Color.blue.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(note.isEmpty ? "Wallet transfer" : note).fontWeight(.medium)
+                Text("\(transfer.sourceWallet?.name ?? "Deleted wallet") → \(transfer.destinationWallet?.name ?? "Deleted wallet")")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("Transfer · \(transfer.date.formatted(date: .abbreviated, time: .omitted))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            VStack(alignment: .trailing, spacing: 4) {
+                Text("−\(transfer.sourceAmount.formatted(.currency(code: transfer.sourceCurrencyCode)))")
+                Text("+\(transfer.destinationAmount.formatted(.currency(code: transfer.destinationCurrencyCode)))")
+            }
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.blue)
+            .monospacedDigit()
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func categorySpendingSection(now: Date) -> some View {
+        let groups = DashboardMetrics.monthlyCategorySpending(transactions: transactions, now: now)
+        let unassignedCount = DashboardMetrics.monthlyTransactions(transactions, now: now)
+            .filter { !$0.isIncome && $0.wallet == nil }.count
+        return VStack(alignment: .leading, spacing: 12) {
+            Text("Spending by category").font(.title3.weight(.semibold))
+            Text(now.formatted(.dateTime.month(.wide).year()))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            if groups.isEmpty {
+                DashboardCard {
+                    Text(unassignedCount == 0 ? "No expenses this month." : "No wallet totals available.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                ForEach(groups) { group in
+                    DashboardCard {
+                        VStack(alignment: .leading, spacing: 18) {
+                            HStack {
+                                Text(group.currencyCode).font(.headline)
+                                Spacer()
+                                Text(group.totalAmount, format: .currency(code: group.currencyCode))
+                                    .fontWeight(.semibold)
+                                    .monospacedDigit()
+                            }
+                            ForEach(group.categories) { category in
+                                categorySpendingRow(category, currency: group.currencyCode, total: group.totalAmount)
+                            }
+                        }
+                    }
+                    .accessibilityIdentifier("categorySpending-\(group.currencyCode)")
+                }
+            }
+            if unassignedCount > 0 {
+                Text("\(unassignedCount) expenses have no wallet and are excluded from this breakdown.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityIdentifier("categorySpendingSection")
+    }
+
+    private func categorySpendingRow(
+        _ category: DashboardMetrics.CategorySpending, currency: String, total: Decimal
+    ) -> some View {
+        let share = total > 0 ? NSDecimalNumber(decimal: category.amount / total).doubleValue : 0
+        let tint = color(named: category.colorName)
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Label(category.name, systemImage: category.icon)
+                    .foregroundStyle(tint)
+                Spacer(minLength: 8)
+                Text(category.amount, format: .currency(code: currency))
+                    .fontWeight(.semibold)
+                    .monospacedDigit()
+            }
+            .font(.subheadline)
+            HStack(spacing: 12) {
+                ProgressView(value: min(max(share, 0), 1))
+                    .tint(tint)
+                    .accessibilityLabel("\(category.name) share of \(currency) spending")
+                Text(share, format: .percent.precision(.fractionLength(0)))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
             }
         }
     }

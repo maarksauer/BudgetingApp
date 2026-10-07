@@ -107,6 +107,35 @@ final class BudgetingAppUITests: XCTestCase {
     }
 
     @MainActor
+    func testHomeCategoryBreakdownAndRecentTransactionsNavigation() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launch()
+        XCTAssertTrue(app.navigationBars["Home"].waitForExistence(timeout: 10))
+        let recent = app.buttons["See all recent transactions"]
+        for _ in 0..<12 {
+            if recent.exists && recent.isHittable { break }
+            app.scrollViews.firstMatch.swipeUp()
+        }
+        XCTAssertTrue(recent.exists && recent.isHittable)
+        XCTAssertTrue(app.staticTexts["Recent transactions"].exists)
+        let categories = app.staticTexts["Spending by category"]
+        for _ in 0..<12 {
+            if categories.exists && categories.isHittable { break }
+            app.scrollViews.firstMatch.swipeUp()
+        }
+        XCTAssertTrue(categories.exists && categories.isHittable)
+        for _ in 0..<12 {
+            if recent.exists && recent.isHittable { break }
+            app.scrollViews.firstMatch.swipeDown()
+        }
+        XCTAssertTrue(recent.isHittable)
+        recent.tap()
+        XCTAssertTrue(app.navigationBars["Transactions"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["openAddExpense"].exists)
+    }
+
+    @MainActor
     private func openAddExpense(in app: XCUIApplication) {
         let add = app.buttons["openAddExpense"].firstMatch
         XCTAssertTrue(add.waitForExistence(timeout: 10))

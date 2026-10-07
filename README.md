@@ -19,11 +19,26 @@ BudgetingApp/
 
 ## Home dashboard
 
-The app opens on Home with this month's spending, income and net cash flow, wallet balances, current budget progress, and the next active recurring bills. Currencies have separate spending totals. Wallet balances include transfers, budget spending matches its categories/currency/date range, and bills use their postponed dates when applicable. Overdue bills appear first; paused bills are excluded.
+The app opens on Home with this month's spending, income and net cash flow, wallet balances, recent transactions, spending by category, current budget progress, and the next active recurring bills. Currencies have separate spending totals. Wallet balances include transfers, budget spending matches its categories/currency/date range, and bills use their postponed dates when applicable. Overdue bills appear first; paused bills are excluded.
 
-Tap a wallet, budget, or bill to open its existing detail screen, or use **See all** to open the full list. Recurring monthly budgets catch up on Home as well as on Budgets.
+Tap a wallet, transaction, transfer, budget, or bill to open its existing detail screen, or use **See all** to open the full list. Recurring monthly budgets catch up on Home as well as on Budgets.
 
 **Add Transaction** is available above the tab bar on each main screen. Choose **Expense** or **Income** at the top. Income needs a positive amount and a wallet; use the source/note field for Salary, Refund, or another description. Income does not require a spending category or sufficient existing funds. Expenses retain their category and balance-limit checks. **Close** returns to the screen you were using and keeps the unfinished transaction, including its type, for the current app session. The keyboard's **Done** button still dismisses it without saving.
+
+## Recent transactions and spending by category
+
+- **Recent transactions** shows the latest five saved income, expense, and transfer entries across all wallets, newest first. It includes older months when there are fewer recent entries, while excluding future dates. Income uses a green plus amount; transfers show both outgoing and incoming amounts in blue.
+- Tap a row to open its existing detail screen for editing or deletion. **See all** opens the Transactions tab with its search and filters.
+- **Spending by category** groups this month's expenses by category and currency. Each currency has its own total, amounts, and percentage bars. Categories appear from highest spending to lowest. Subcategories contribute to their parent category; categories with identical names remain distinct.
+- Expenses with no category, including those whose category was deleted, appear as **Uncategorized**. Expenses with no wallet are excluded, with an explanatory count. Income and transfers never contribute to the breakdown.
+- Empty states appear when there is no activity or no monthly spending. Changes made from a transaction detail screen update Home through the existing SwiftData queries.
+
+### Check the updated Home
+
+1. Add two HUF expenses of 3,000 and 2,000 to Food, and 1,000 to Transport. Food should show 5,000 HUF (83%) and Transport 1,000 HUF (17%) when these are the only expenses this month.
+2. Add an EUR expense and verify it gets a separate currency card. Add income and a transfer; both should appear in recent transactions without increasing category spending.
+3. Tap an expense, an income, and a transfer from Home and check their detail screens. Edit an expense amount and return to Home to verify the category total updates. Delete a transaction and check it disappears from recent transactions.
+4. Use **Recent transactions → See all** to open Transactions. Check empty Home states and the layout with large text, long category names, and long notes.
 
 ## Income support
 
@@ -44,6 +59,12 @@ Tap a wallet, budget, or bill to open its existing detail screen, or use **See a
 5. Edit the income amount and then move it to another wallet of the same currency; verify both balances. Delete it and verify that it no longer appears in Home income or wallet history.
 6. Add income in EUR as well as HUF and check each currency stays separate. Add a transfer and verify it affects wallet balances without changing cash flow.
 7. Close an unfinished income, change tabs, and reopen Add Transaction; type, amount, and note should be preserved. Restart the app after saving and confirm the income still exists.
+
+## If Xcode reports undefined symbols after replacing the project
+
+If the linker reports missing `ExpenseTransaction.isIncome`, its new initializer, or `Wallet.balance(including:)`, first choose **Product → Clean Build Folder** (Shift–Command–K), then build again (Command–B). This clears old compiled model files that can remain after replacing source files. The updated ZIP gives app sources fresh timestamps as well.
+
+If it persists, close Xcode, extract this ZIP into a new folder instead of merging it with your old project, and open the included `Budgeting App.xcodeproj`. Build the **Budgeting App** scheme again. A build has not been verified on macOS in this environment.
 
 ## Build and test on a Mac
 
@@ -70,7 +91,7 @@ xcodebuild -project "Budgeting App.xcodeproj" -scheme "Budgeting App" \
   -derivedDataPath /tmp/budgeting-app-derived test
 ```
 
-The scheme includes fifteen unit tests covering wallet balances, overdraft limits, recurring-payment rescheduling, paused payments, monthly totals by currency, transfer amounts, budget date/category/currency matching, bill ordering, and recurring-budget catch-up without duplicate pending periods. Income tests also cover decimal balances with transfers, monthly income/cash flow, spending/budget exclusions, persistent edits and wallet moves, deletion, and store reopening. Four UI tests cover Home/navigation, reopening expense and income drafts, and keyboard dismissal. Run the UI tests on an iPhone simulator with the software keyboard enabled, where the tab bar is visible. Test sources belong only to their test targets; app sources and assets belong only to the app target. `Info.plist` is processed as build configuration, not copied as a resource.
+The scheme includes twenty unit tests covering wallet balances, overdraft limits, recurring-payment rescheduling, paused payments, monthly totals by currency, transfer amounts, budget date/category/currency matching, bill ordering, and recurring-budget catch-up without duplicate pending periods. Income tests also cover decimal balances with transfers, monthly income/cash flow, spending/budget exclusions, persistent edits and wallet moves, deletion, and store reopening. Dashboard tests also cover category identity and currency separation, subcategory aggregation, excluded dates/income, missing categories/wallets, updates, combined recent activity, limits, and stable ordering. Five UI tests cover Home/navigation, its category and recent sections, reopening expense and income drafts, and keyboard dismissal. Run the UI tests on an iPhone simulator with the software keyboard enabled, where the tab bar is visible. Test sources belong only to their test targets; app sources and assets belong only to the app target. `Info.plist` is processed as build configuration, not copied as a resource.
 
 On Add Transaction, use **Done** above the keyboard or drag the form to dismiss it. The note field's Done/Return key also dismisses the keyboard. Dismissing preserves the entered amount and note. Check this with no wallet configured as well as with a valid expense draft, and verify that you can open another tab afterward without creating a transaction.
 

@@ -288,6 +288,98 @@ final class BudgetingAppTests: XCTestCase {
         XCTAssertEqual(wallet.currentBalance, 90)
     }
 
+    @MainActor
+    func testMonthlyCategorySpendingUsesCategoryIdentityAndSeparateCurrencies() throws {
+        let food = SpendingCategory(name: "Food", icon: "fork.knife", colorName: "orange")
+        let otherFood = SpendingCategory(name: "Food", icon: "basket", colorName: "green")
+        let groceries = SpendingSubcategory(name: "Groceries", category: food)
+        let eur = Wallet(name: "Euro", startingBalance: 1000, currencyCode: "EUR", walletType: "Cash")
+        let huf = Wallet(name: "Forint", startingBalance: 10000, currencyCode: "HUF", walletType: "Cash")
+        let otherHuf = Wallet(name: "Bank", startingBalance: 10000, currencyCode: "HUF", walletType: "Bank Account")
+        let transactions = [
+            ExpenseTransaction(amount: Decimal(string: "12.30")!, date: date(2026, 10, 1), wallet: eur, category: food),
+            ExpenseTransaction(amount: Decimal(string: "7.45")!, date: date(2026, 10, 3), wallet: eur, category: food, subcategory: groceries),
+            ExpenseTransaction(amount: 5, date: date(2026, 10, 3), wallet: eur, category: otherFood),
+            ExpenseTransaction(amount: 2, date: date(2026, 10, 4), wallet: eur),
+            ExpenseTransaction(amount: 1500, date: date(2026, 10, 3), wallet: huf, category: food),
+            ExpenseTransaction(amount: 3500, date: date(2026, 10, 3), wallet: otherHuf, category: food),
+            ExpenseTransaction(amount: 99, date: date(2026, 9, 30), wallet: eur, category: food),
+            ExpenseTransaction(amount: 44, date: date(2026, 10, 8), wallet: eur, category: food),
+            ExpenseTransaction(amount: 50, date: date(2026, 11, 1), wallet: eur, category: food),
+            ExpenseTransaction(amount: 100, date: date(2026, 10, 3), category: food),
+            ExpenseTransaction(amount: 685000, isIncome: true, date: date(2026, 10, 3), wallet: huf, category: food)
+        ]
+        let now = date(2026, 10, 7, hour: 12)
+        let groups = DashboardMetrics.monthlyCategorySpending(transactions: transactions, now: now, calendar: utcCalendar)
+        XCTAssertEqual(groups.map(\.currencyCode), ["EUR", "HUF"])
+        XCTAssertEqual(groups.map(\.totalAmount), [Decimal(string: "26.75")!, 5000])
+        let euros = try XCTUnwrap(groups.first)
+        XCTAssertEqual(euros.categories.map(\.name), ["Food", "Food", "Uncategorized"])
+        XCTAssertEqual(euros.categories.map(\.amount), [Decimal(string: "19.75")!, 5, 2])
+        XCTAssertEqual(Set(euros.categories.map(\.id)).count, 3)
+        XCTAssertEqual(euros.categories.first?.icon, "fork.knife")
+        XCTAssertEqual(euros.categories.first?.colorName, "orange")
+        let spending = DashboardMetrics.monthlySpending(transactions: transactions, wallets: [eur, huf, otherHuf], now: now, calendar: utcCalendar)
+        XCTAssertEqual(groups.map(\.totalAmount), spending.map(\.amount))
+    }
+
+    @MainActor
+    func testCategoryBreakdownHasNoGroupsWithoutMonthlyExpenses() {
+        let wallet = Wallet(name: "Bank", startingBalance: 0, currencyCode: "EUR", walletType: "Bank Account")
+        let income = ExpenseTransaction(amount: 100, isIncome: true, date: date(2026, 10, 3), wallet: wallet)
+        let oldExpense = ExpenseTransaction(amount: 50, date: date(2026, 9, 30), wallet: wallet)
+        XCTAssertTrue(DashboardMetrics.monthlyCategorySpending(transactions: [], now: date(2026, 10, 7), calendar: utcCalendar).isEmpty)
+        XCTAssertTrue(DashboardMetrics.monthlyCategorySpending(transactions: [income, oldExpense], now: date(2026, 10, 7), calendar: utcCalendar).isEmpty)
+    }
+
+    @MainActor
+    func testRecentActivityCombinesIncomeExpensesAndTransfersNewestFirst() {
+        let bank = Wallet(name: "Bank", startingBalance: 1000, currencyCode: "EUR", walletType: "Bank Account")
+        let cash = Wallet(name: "Cash", startingBalance: 0, currencyCode: "EUR", walletType: "Cash")
+        let expense = ExpenseTransaction(amount: 20, date: date(2026, 10, 5), wallet: bank)
+        let income = ExpenseTransaction(amount: 100, isIncome: true, date: date(2026, 10, 6), wallet: bank)
+        let transfer = WalletTransfer(sourceAmount: 10, destinationAmount: 10, date: date(2026, 10, 7), sourceWallet: bank, destinationWallet: cash)
+        let future = ExpenseTransaction(amount: 200, date: date(2026, 10, 8), wallet: bank)
+        let old = ExpenseTransaction(amount: 5, date: date(2026, 9, 30), wallet: bank)
+        let recent = DashboardMetrics.recentActivity(transactions: [expense, future, income, old], transfers: [transfer], now: date(2026, 10, 7, hour: 12))
+        XCTAssertEqual(recent.map(\.date), [transfer.date, income.date, expense.date, old.date])
+        XCTAssertEqual(Set(recent.map(\.id)).count, 4)
+        if case .transfer(let first) = recent[0] {
+            XCTAssertEqual(first.persistentModelID, transfer.persistentModelID)
+        } else { XCTFail("The newest transfer should be first.") }
+        if case .transaction(let second) = recent[1] {
+            XCTAssertTrue(second.isIncome)
+        } else { XCTFail("Income should appear in recent transactions.") }
+    }
+
+    @MainActor
+    func testRecentActivityLimitAndEqualDateOrderingAreStable() {
+        let now = date(2026, 10, 7)
+        let transactions = (1...7).map { ExpenseTransaction(amount: Decimal($0), date: now) }
+        let first = DashboardMetrics.recentActivity(transactions: transactions, transfers: [], now: now)
+        let reversed = DashboardMetrics.recentActivity(transactions: Array(transactions.reversed()), transfers: [], now: now)
+        XCTAssertEqual(first.count, 5)
+        XCTAssertEqual(first.map(\.id), reversed.map(\.id))
+        XCTAssertEqual(first.map(\.id), first.map(\.id).sorted())
+        XCTAssertTrue(DashboardMetrics.recentActivity(transactions: transactions, transfers: [], now: now, limit: 0).isEmpty)
+        XCTAssertTrue(DashboardMetrics.recentActivity(transactions: transactions, transfers: [], now: now, limit: -1).isEmpty)
+        XCTAssertTrue(DashboardMetrics.recentActivity(transactions: [], transfers: [], now: now).isEmpty)
+    }
+
+    @MainActor
+    func testCategoryBreakdownReflectsEditsAndDeletedCategories() throws {
+        let category = SpendingCategory(name: "Food", icon: "fork.knife", colorName: "orange")
+        let wallet = Wallet(name: "Cash", startingBalance: 1000, currencyCode: "EUR", walletType: "Cash")
+        let expense = ExpenseTransaction(amount: 10, date: date(2026, 10, 3), wallet: wallet, category: category)
+        let now = date(2026, 10, 7)
+        expense.amount = 15
+        expense.category = nil
+        let group = try XCTUnwrap(DashboardMetrics.monthlyCategorySpending(transactions: [expense], now: now, calendar: utcCalendar).first)
+        XCTAssertEqual(group.totalAmount, 15)
+        XCTAssertEqual(group.categories.first?.name, "Uncategorized")
+        XCTAssertTrue(DashboardMetrics.monthlyCategorySpending(transactions: [], now: now, calendar: utcCalendar).isEmpty)
+    }
+
     private var utcCalendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!

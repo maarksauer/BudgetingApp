@@ -9,6 +9,82 @@ enum DashboardMetrics {
         let amount: Decimal
     }
 
+    struct CategorySpending: Identifiable {
+        let id: String
+        let name: String
+        let icon: String
+        let colorName: String
+        var amount: Decimal
+    }
+
+    struct CurrencyCategorySpending: Identifiable {
+        var id: String { currencyCode }
+        let currencyCode: String
+        let totalAmount: Decimal
+        let categories: [CategorySpending]
+    }
+
+    enum RecentActivity: Identifiable {
+        case transaction(ExpenseTransaction)
+        case transfer(WalletTransfer)
+
+        var id: String {
+            switch self {
+            case .transaction(let transaction): return "transaction-\(transaction.persistentModelID)"
+            case .transfer(let transfer): return "transfer-\(transfer.persistentModelID)"
+            }
+        }
+
+        var date: Date {
+            switch self {
+            case .transaction(let transaction): return transaction.date
+            case .transfer(let transfer): return transfer.date
+            }
+        }
+    }
+
+    static func recentActivity(
+        transactions: [ExpenseTransaction], transfers: [WalletTransfer],
+        now: Date, limit: Int = 5
+    ) -> [RecentActivity] {
+        let activities = transactions.map { RecentActivity.transaction($0) }
+            + transfers.map { RecentActivity.transfer($0) }
+        return Array(activities.filter { $0.date <= now }.sorted {
+            if $0.date == $1.date { return $0.id < $1.id }
+            return $0.date > $1.date
+        }.prefix(max(0, limit)))
+    }
+
+    static func monthlyCategorySpending(
+        transactions: [ExpenseTransaction], now: Date, calendar: Calendar = .current
+    ) -> [CurrencyCategorySpending] {
+        var totals: [String: [String: CategorySpending]] = [:]
+        for transaction in monthlyTransactions(transactions, now: now, calendar: calendar) {
+            guard !transaction.isIncome, let wallet = transaction.wallet else { continue }
+            let category = transaction.category
+            // Keep distinct categories separate, even if their names are identical.
+            let categoryID = category.map { String(describing: $0.persistentModelID) } ?? "uncategorized"
+            var row = totals[wallet.currencyCode]?[categoryID] ?? CategorySpending(
+                id: categoryID, name: category?.name ?? "Uncategorized",
+                icon: category?.icon ?? "tag", colorName: category?.colorName ?? "gray", amount: 0
+            )
+            row.amount += transaction.amount
+            totals[wallet.currencyCode, default: [:]][categoryID] = row
+        }
+        return totals.keys.sorted().map { currency in
+            let categories = Array(totals[currency, default: [:]].values).sorted {
+                if $0.amount != $1.amount { return $0.amount > $1.amount }
+                if $0.name != $1.name { return $0.name < $1.name }
+                return $0.id < $1.id
+            }
+            return CurrencyCategorySpending(
+                currencyCode: currency,
+                totalAmount: categories.reduce(Decimal.zero) { $0 + $1.amount },
+                categories: categories
+            )
+        }
+    }
+
     static func monthlyTransactions(
         _ transactions: [ExpenseTransaction],
         now: Date,
