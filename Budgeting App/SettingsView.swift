@@ -72,6 +72,13 @@ struct SettingsView: View {
                         Label("Export Data", systemImage: "square.and.arrow.up")
                     }
                     .accessibilityIdentifier("openExportData")
+
+                    NavigationLink {
+                        BackupRestoreView()
+                    } label: {
+                        Label("Backup & Restore", systemImage: "externaldrive")
+                    }
+                    .accessibilityIdentifier("openBackupRestore")
                 }
             }
 

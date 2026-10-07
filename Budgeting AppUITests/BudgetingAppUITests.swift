@@ -171,6 +171,32 @@ final class BudgetingAppUITests: XCTestCase {
     }
 
     @MainActor
+    func testBackupRestoreNavigationAndActions() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launch()
+        app.tabBars.buttons["More"].tap()
+        let backup = app.buttons["openBackupRestore"].firstMatch
+        for _ in 0..<6 {
+            if backup.exists && backup.isHittable { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(backup.waitForExistence(timeout: 5))
+        backup.tap()
+        XCTAssertTrue(app.navigationBars["Backup & Restore"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["saveAppBackup"].exists)
+        XCTAssertTrue(app.buttons["saveAppBackup"].isEnabled)
+        let choose = app.buttons["chooseAppBackup"]
+        for _ in 0..<6 {
+            if choose.exists && choose.isHittable { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(choose.exists)
+        XCTAssertTrue(choose.isEnabled)
+        XCTAssertFalse(app.buttons["restoreAppBackup"].exists)
+    }
+
+    @MainActor
     private func openAddExpense(in app: XCUIApplication) {
         let add = app.buttons["openAddExpense"].firstMatch
         XCTAssertTrue(add.waitForExistence(timeout: 10))

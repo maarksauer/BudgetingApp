@@ -18,6 +18,23 @@ final class WalletTransfer {
 
     var createdAt: Date
 
+    // Backup restoration retains currency codes even after either wallet was deleted.
+    init(
+        sourceAmount: Decimal, destinationAmount: Decimal, date: Date, note: String,
+        sourceWallet: Wallet?, destinationWallet: Wallet?,
+        sourceCurrencyCode: String, destinationCurrencyCode: String, createdAt: Date
+    ) {
+        self.sourceAmount = sourceAmount
+        self.destinationAmount = destinationAmount
+        self.date = date
+        self.note = note
+        self.sourceWallet = sourceWallet
+        self.destinationWallet = destinationWallet
+        self.sourceCurrencyCode = sourceCurrencyCode
+        self.destinationCurrencyCode = destinationCurrencyCode
+        self.createdAt = createdAt
+    }
+
     init(
         sourceAmount: Decimal,
         destinationAmount: Decimal,
