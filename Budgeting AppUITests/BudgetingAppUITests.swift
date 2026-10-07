@@ -10,13 +10,14 @@ final class BudgetingAppUITests: XCTestCase {
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
         XCTAssertTrue(app.navigationBars["Home"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["Spent this month"].exists)
+        XCTAssertTrue(app.staticTexts["Income this month"].exists)
 
         let walletsTab = app.tabBars.buttons["Wallets"]
         XCTAssertTrue(walletsTab.waitForExistence(timeout: 10))
         walletsTab.tap()
         XCTAssertTrue(app.navigationBars["Wallets"].waitForExistence(timeout: 5))
         openAddExpense(in: app)
-        XCTAssertTrue(app.navigationBars["Add Expense"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["Add Transaction"].waitForExistence(timeout: 5))
         app.buttons["closeAddExpense"].tap()
         XCTAssertTrue(app.navigationBars["Wallets"].waitForExistence(timeout: 5))
     }
@@ -41,7 +42,7 @@ final class BudgetingAppUITests: XCTestCase {
         dismissExpenseKeyboard(in: app)
         XCTAssertEqual(note.value as? String, "Unfinished expense")
         XCTAssertEqual(amount.value as? String, "123")
-        XCTAssertFalse(app.alerts["Expense Added"].exists)
+        XCTAssertFalse(app.alerts["Transaction Added"].exists)
 
         app.buttons["closeAddExpense"].tap()
         XCTAssertTrue(app.navigationBars["Home"].waitForExistence(timeout: 5))
@@ -67,7 +68,42 @@ final class BudgetingAppUITests: XCTestCase {
         note.typeText("Draft note\n")
         assertKeyboardHidden(in: app)
         XCTAssertEqual(note.value as? String, "Draft note")
-        XCTAssertFalse(app.alerts["Expense Added"].exists)
+        XCTAssertFalse(app.alerts["Transaction Added"].exists)
+    }
+
+    @MainActor
+    func testIncomeDraftKeepsTypeAndValuesAcrossTabs() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launch()
+        openAddExpense(in: app)
+        let type = app.segmentedControls["transactionType"]
+        XCTAssertTrue(type.waitForExistence(timeout: 5))
+        type.buttons["Income"].tap()
+
+        let amount = app.textFields["expenseAmount"]
+        amount.tap()
+        amount.typeText("685000")
+        dismissExpenseKeyboard(in: app)
+        let note = app.textFields["expenseNote"]
+        note.tap()
+        note.typeText("Salary")
+        dismissExpenseKeyboard(in: app)
+        XCTAssertFalse(app.staticTexts["Select Category"].exists)
+        XCTAssertFalse(app.alerts["Transaction Added"].exists)
+
+        app.buttons["closeAddExpense"].tap()
+        app.tabBars.buttons["Wallets"].tap()
+        openAddExpense(in: app)
+        XCTAssertTrue(type.buttons["Income"].isSelected)
+        XCTAssertEqual(amount.value as? String, "685000")
+        XCTAssertEqual(note.value as? String, "Salary")
+        XCTAssertFalse(app.keyboards.firstMatch.exists)
+
+        type.buttons["Expense"].tap()
+        XCTAssertTrue(type.buttons["Expense"].isSelected)
+        XCTAssertEqual(amount.value as? String, "685000")
+        XCTAssertEqual(note.value as? String, "Salary")
     }
 
     @MainActor

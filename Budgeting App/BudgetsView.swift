@@ -591,6 +591,7 @@ struct BudgetsView: View {
             transaction in
 
             guard
+                !transaction.isIncome,
                 let category =
                     transaction.category,
                 let wallet =

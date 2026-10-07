@@ -4,6 +4,9 @@ import SwiftData
 @Model
 final class ExpenseTransaction {
 
+    // Default keeps previously saved transactions classified as expenses.
+    var isIncome: Bool = false
+
     var amount: Decimal
     var date: Date
     var note: String
@@ -19,8 +22,16 @@ final class ExpenseTransaction {
     var recurringScheduledDate: Date?
     var recurringPostponedUntil: Date?
 
+    var balanceImpact: Decimal {
+        isIncome ? amount : -amount
+    }
+
+    var typeName: String { isIncome ? "Income" : "Expense" }
+    var amountSign: String { isIncome ? "+" : "−" }
+
     init(
         amount: Decimal,
+        isIncome: Bool = false,
         date: Date = .now,
         note: String = "",
         wallet: Wallet? = nil,
@@ -32,6 +43,7 @@ final class ExpenseTransaction {
     ) {
 
         self.amount = amount
+        self.isIncome = isIncome
         self.date = date
         self.note = note
 

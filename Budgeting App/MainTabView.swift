@@ -65,7 +65,7 @@ private struct AddExpenseAction: ViewModifier {
     func body(content: Content) -> some View {
         content.safeAreaInset(edge: .bottom, spacing: 0) {
             Button(action: action) {
-                Label("Add Expense", systemImage: "plus.circle.fill")
+                Label("Add Transaction", systemImage: "plus.circle.fill")
                     .font(.headline)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 4)

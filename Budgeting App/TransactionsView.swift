@@ -293,6 +293,8 @@ struct TransactionsView: View {
                 amount.contains(search)
                 ||
                 currency.contains(search)
+                ||
+                transaction.typeName.lowercased().contains(search)
 
         case .transfer(
             let transfer
@@ -720,6 +722,9 @@ struct TransactionsView: View {
                         Text("•")
                     }
 
+                    Text(transaction.typeName)
+                    Text("•")
+
                     Text(
                         transaction.date
                             .formatted(
@@ -744,8 +749,9 @@ struct TransactionsView: View {
             ) {
 
                 Text(
-                    "-\(transaction.amount.formatted(.number))"
+                    "\(transaction.amountSign)\(transaction.amount.formatted(.number))"
                 )
+                .foregroundStyle(transaction.isIncome ? Color.green : Color.primary)
                 .fontWeight(
                     .semibold
                 )
@@ -913,7 +919,7 @@ struct TransactionsView: View {
             return category.name
         }
 
-        return "Expense"
+        return transaction.typeName
     }
 
     @ViewBuilder
@@ -922,7 +928,13 @@ struct TransactionsView: View {
             ExpenseTransaction
     ) -> some View {
 
-        if let category =
+        if transaction.isIncome {
+            Image(systemName: "arrow.down.left")
+                .foregroundStyle(.white)
+                .frame(width: 40, height: 40)
+                .background(Color.green)
+                .clipShape(RoundedRectangle(cornerRadius: 11))
+        } else if let category =
             transaction.category {
 
             Image(
@@ -1004,7 +1016,7 @@ struct TransactionsView: View {
             )
 
             Text(
-                "Expenses and wallet transfers will appear here."
+                "Income, expenses, and wallet transfers will appear here."
             )
             .foregroundStyle(
                 .secondary

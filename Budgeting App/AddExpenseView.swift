@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 
 struct ExpenseDraft {
+    var isIncome = false
     var amount = ""
     var note = ""
     var transactionDate = Date()
@@ -24,6 +25,7 @@ struct AddExpenseView: View {
     @Query
     private var transfers: [WalletTransfer]
 
+    @Binding private var isIncome: Bool
     @Binding private var amount: String
     @Binding private var note: String
     @Binding private var transactionDate: Date
@@ -36,6 +38,7 @@ struct AddExpenseView: View {
     @Binding private var selectedSubcategoryID: PersistentIdentifier?
 
     @State private var showingSavedConfirmation = false
+    @State private var showingSaveError = false
 
     private enum Field: Hashable {
         case amount
@@ -47,6 +50,7 @@ struct AddExpenseView: View {
     private let onClose: () -> Void
 
     init(draft: Binding<ExpenseDraft>, onClose: @escaping () -> Void) {
+        _isIncome = draft.isIncome
         _amount = draft.amount
         _note = draft.note
         _transactionDate = draft.transactionDate
@@ -64,7 +68,16 @@ struct AddExpenseView: View {
 
                 // MARK: - Expense
 
-                Section("Expense") {
+                Section("Transaction Type") {
+                    Picker("Type", selection: $isIncome) {
+                        Text("Expense").tag(false)
+                        Text("Income").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .accessibilityIdentifier("transactionType")
+                }
+
+                Section(isIncome ? "Income" : "Expense") {
 
                     TextField(
                         "Amount",
@@ -94,7 +107,7 @@ struct AddExpenseView: View {
                     )
 
                     TextField(
-                        "Note",
+                        isIncome ? "Source or note (e.g. Salary)" : "Note",
                         text: $note
                     )
                     .focused($focusedField, equals: .note)
@@ -109,7 +122,7 @@ struct AddExpenseView: View {
                     if wallets.isEmpty {
 
                         Text(
-                            "Create a wallet before adding an expense."
+                            "Create a wallet before adding a transaction."
                         )
                         .foregroundStyle(.secondary)
 
@@ -215,94 +228,96 @@ struct AddExpenseView: View {
 
                 // MARK: - Category
 
-                Section("Category") {
+                if !isIncome {
+                    Section("Category") {
 
-                    if categories.isEmpty {
-
-                        Text(
-                            "No categories available."
-                        )
-                        .foregroundStyle(
-                            .secondary
-                        )
-
-                    } else {
-
-                        Picker(
-                            "Category",
-                            selection:
-                                $selectedCategory
-                        ) {
+                        if categories.isEmpty {
 
                             Text(
-                                "Select Category"
+                                "No categories available."
                             )
-                            .tag(
-                                nil as SpendingCategory?
+                            .foregroundStyle(
+                                .secondary
                             )
 
-                            ForEach(
-                                categories
-                            ) { category in
-
-                                Text(
-                                    category.name
-                                )
-                                .tag(
-                                    category
-                                        as SpendingCategory?
-                                )
-                            }
-                        }
-                        .onChange(
-                            of: selectedCategory
-                        ) {
-
-                            selectedSubcategoryID =
-                                nil
-                        }
-
-                        if let selectedCategory,
-                           !selectedCategory
-                            .subcategories
-                            .isEmpty {
+                        } else {
 
                             Picker(
-                                "Subcategory",
+                                "Category",
                                 selection:
-                                    $selectedSubcategoryID
+                                    $selectedCategory
                             ) {
 
                                 Text(
-                                    "None"
+                                    "Select Category"
                                 )
                                 .tag(
-                                    nil
-                                        as PersistentIdentifier?
+                                    nil as SpendingCategory?
                                 )
 
                                 ForEach(
-                                    selectedCategory
-                                        .subcategories
-                                        .sorted {
-
-                                            $0.name
-                                                .localizedCaseInsensitiveCompare(
-                                                    $1.name
-                                                )
-                                            ==
-                                            .orderedAscending
-                                        }
-                                ) { subcategory in
+                                    categories
+                                ) { category in
 
                                     Text(
-                                        subcategory.name
+                                        category.name
                                     )
                                     .tag(
-                                        subcategory
-                                            .persistentModelID
+                                        category
+                                            as SpendingCategory?
+                                    )
+                                }
+                            }
+                            .onChange(
+                                of: selectedCategory
+                            ) {
+
+                                selectedSubcategoryID =
+                                    nil
+                            }
+
+                            if let selectedCategory,
+                               !selectedCategory
+                                .subcategories
+                                .isEmpty {
+
+                                Picker(
+                                    "Subcategory",
+                                    selection:
+                                        $selectedSubcategoryID
+                                ) {
+
+                                    Text(
+                                        "None"
+                                    )
+                                    .tag(
+                                        nil
                                             as PersistentIdentifier?
                                     )
+
+                                    ForEach(
+                                        selectedCategory
+                                            .subcategories
+                                            .sorted {
+
+                                                $0.name
+                                                    .localizedCaseInsensitiveCompare(
+                                                        $1.name
+                                                    )
+                                                ==
+                                                .orderedAscending
+                                            }
+                                    ) { subcategory in
+
+                                        Text(
+                                            subcategory.name
+                                        )
+                                        .tag(
+                                            subcategory
+                                                .persistentModelID
+                                                as PersistentIdentifier?
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -320,7 +335,7 @@ struct AddExpenseView: View {
                     } label: {
 
                         Text(
-                            "Add Expense"
+                            isIncome ? "Add Income" : "Add Expense"
                         )
                         .frame(
                             maxWidth:
@@ -353,7 +368,7 @@ struct AddExpenseView: View {
             #endif
 
             .navigationTitle(
-                "Add Expense"
+                "Add Transaction"
             )
 
             .toolbar {
@@ -377,8 +392,14 @@ struct AddExpenseView: View {
                 focusedField = nil
             }
 
+            .alert("Couldn’t save transaction", isPresented: $showingSaveError) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("Your draft is still here. Please try again.")
+            }
+
             .alert(
-                "Expense Added",
+                "Transaction Added",
                 isPresented:
                     $showingSavedConfirmation
             ) {
@@ -455,6 +476,8 @@ struct AddExpenseView: View {
     private var exceedsAvailableBalance:
         Bool {
 
+        guard !isIncome else { return false }
+
         guard
             let amount =
                 parsedAmount,
@@ -479,7 +502,7 @@ struct AddExpenseView: View {
         guard
             parsedAmount != nil,
             selectedWallet != nil,
-            selectedCategory != nil
+            (isIncome || selectedCategory != nil)
         else {
 
             return false
@@ -521,51 +544,7 @@ struct AddExpenseView: View {
     private func balance(
         for wallet: Wallet
     ) -> Decimal {
-
-        let transfersOut =
-            transfers
-                .filter {
-
-                    $0.sourceWallet?
-                        .persistentModelID
-                    ==
-                    wallet
-                        .persistentModelID
-                }
-                .reduce(
-                    Decimal.zero
-                ) {
-
-                    $0
-                    +
-                    $1.sourceAmount
-                }
-
-        let transfersIn =
-            transfers
-                .filter {
-
-                    $0.destinationWallet?
-                        .persistentModelID
-                    ==
-                    wallet
-                        .persistentModelID
-                }
-                .reduce(
-                    Decimal.zero
-                ) {
-
-                    $0
-                    +
-                    $1.destinationAmount
-                }
-
-        return
-            wallet.currentBalance
-            -
-            transfersOut
-            +
-            transfersIn
+        wallet.balance(including: transfers)
     }
 
     private func availableAmount(
@@ -608,27 +587,15 @@ struct AddExpenseView: View {
 
     private func addExpense() {
 
-        guard
-            let decimalAmount =
-                parsedAmount,
-            let wallet =
-                selectedWallet,
-            let category =
-                selectedCategory,
-            decimalAmount
-            <=
-            availableAmount(
-                for: wallet
-            )
-        else {
-
-            return
-        }
+        guard canAddExpense,
+              let decimalAmount = parsedAmount,
+              let wallet = selectedWallet else { return }
 
         let transaction =
             ExpenseTransaction(
                 amount:
                     decimalAmount,
+                isIncome: isIncome,
                 date:
                     transactionDate,
                 note:
@@ -640,14 +607,22 @@ struct AddExpenseView: View {
                 wallet:
                     wallet,
                 category:
-                    category,
+                    isIncome ? nil : selectedCategory,
                 subcategory:
-                    selectedSubcategory
+                    isIncome ? nil : selectedSubcategory
             )
 
         modelContext.insert(
             transaction
         )
+
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.delete(transaction)
+            showingSaveError = true
+            return
+        }
 
         focusedField = nil
 

@@ -28,12 +28,45 @@ enum DashboardMetrics {
         now: Date,
         calendar: Calendar = .current
     ) -> [CurrencySpending] {
+        monthlyTotals(transactions: transactions, wallets: wallets, now: now,
+                      calendar: calendar, isIncome: false)
+    }
+
+    static func monthlyIncome(
+        transactions: [ExpenseTransaction], wallets: [Wallet], now: Date,
+        calendar: Calendar = .current
+    ) -> [CurrencySpending] {
+        monthlyTotals(transactions: transactions, wallets: wallets, now: now,
+                      calendar: calendar, isIncome: true)
+    }
+
+    static func monthlyNetCashFlow(
+        transactions: [ExpenseTransaction], wallets: [Wallet], now: Date,
+        calendar: Calendar = .current
+    ) -> [CurrencySpending] {
+        // Transfers move existing money; they are neither income nor spending.
+        let income = monthlyIncome(transactions: transactions, wallets: wallets, now: now, calendar: calendar)
+        let spending = monthlySpending(transactions: transactions, wallets: wallets, now: now, calendar: calendar)
+        let spendingByCurrency = Dictionary(uniqueKeysWithValues: spending.map { ($0.currencyCode, $0.amount) })
+        let incomeByCurrency = Dictionary(uniqueKeysWithValues: income.map { ($0.currencyCode, $0.amount) })
+        let currencies = Set(incomeByCurrency.keys).union(spendingByCurrency.keys)
+        return currencies.sorted().map {
+            CurrencySpending(currencyCode: $0,
+                             amount: incomeByCurrency[$0, default: 0] - spendingByCurrency[$0, default: 0])
+        }
+    }
+
+    private static func monthlyTotals(
+        transactions: [ExpenseTransaction], wallets: [Wallet], now: Date,
+        calendar: Calendar, isIncome: Bool
+    ) -> [CurrencySpending] {
         var totals: [String: Decimal] = [:]
         for wallet in wallets {
             totals[wallet.currencyCode] = 0
         }
         for transaction in monthlyTransactions(transactions, now: now, calendar: calendar) {
-            guard let currency = transaction.wallet?.currencyCode else { continue }
+            guard transaction.isIncome == isIncome,
+                  let currency = transaction.wallet?.currencyCode else { continue }
             totals[currency, default: 0] += transaction.amount
         }
         return totals.keys.sorted().map {
@@ -42,13 +75,7 @@ enum DashboardMetrics {
     }
 
     static func balance(for wallet: Wallet, transfers: [WalletTransfer]) -> Decimal {
-        let outgoing = transfers.filter {
-            $0.sourceWallet?.persistentModelID == wallet.persistentModelID
-        }.reduce(Decimal.zero) { $0 + $1.sourceAmount }
-        let incoming = transfers.filter {
-            $0.destinationWallet?.persistentModelID == wallet.persistentModelID
-        }.reduce(Decimal.zero) { $0 + $1.destinationAmount }
-        return wallet.currentBalance - outgoing + incoming
+        wallet.balance(including: transfers)
     }
 
     static func currentBudgets(
@@ -74,7 +101,7 @@ enum DashboardMetrics {
         ) ?? budget.endDate
         let categoryIDs = Set(budget.categories.map { $0.persistentModelID })
         return transactions.filter {
-            guard let category = $0.category, let wallet = $0.wallet else { return false }
+            guard !$0.isIncome, let category = $0.category, let wallet = $0.wallet else { return false }
             return categoryIDs.contains(category.persistentModelID) &&
                 wallet.currencyCode == budget.currencyCode &&
                 $0.date >= start && $0.date < end

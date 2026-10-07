@@ -58,6 +58,7 @@ final class BudgetingAppTests: XCTestCase {
             ExpenseTransaction(amount: Decimal(string: "12.30")!, date: date(2026, 10, 1), wallet: eur),
             ExpenseTransaction(amount: Decimal(string: "7.45")!, date: date(2026, 10, 7), wallet: eur),
             ExpenseTransaction(amount: 1500, date: date(2026, 10, 3), wallet: huf),
+            ExpenseTransaction(amount: 685000, isIncome: true, date: date(2026, 10, 3), wallet: huf),
             ExpenseTransaction(amount: 99, date: date(2026, 9, 30), wallet: eur),
             ExpenseTransaction(amount: 44, date: date(2026, 10, 8), wallet: eur),
             ExpenseTransaction(amount: 5000, date: date(2026, 11, 1), wallet: huf),
@@ -104,7 +105,9 @@ final class BudgetingAppTests: XCTestCase {
             ExpenseTransaction(amount: 50, date: date(2026, 9, 30), wallet: eur, category: food),
             ExpenseTransaction(amount: 60, date: date(2026, 10, 8), wallet: eur, category: food),
             ExpenseTransaction(amount: 70, date: date(2026, 10, 4), category: food),
-            ExpenseTransaction(amount: 80, date: date(2026, 10, 4), wallet: eur)
+            ExpenseTransaction(amount: 80, date: date(2026, 10, 4), wallet: eur),
+            // Even income with an expense category must never use up a budget.
+            ExpenseTransaction(amount: 500, isIncome: true, date: date(2026, 10, 4), wallet: eur, category: food)
         ]
 
         XCTAssertEqual(DashboardMetrics.spent(for: budget, transactions: transactions, calendar: utcCalendar),
@@ -165,6 +168,124 @@ final class BudgetingAppTests: XCTestCase {
         let periods = try context.fetch(FetchDescriptor<Budget>())
         XCTAssertEqual(periods.count, 3)
         XCTAssertEqual(Set(periods.map(\.startDate)).count, 3)
+    }
+
+    @MainActor
+    func testExistingTransactionInitializersStillCreateExpenses() {
+        let expense = ExpenseTransaction(amount: 25)
+        XCTAssertFalse(expense.isIncome)
+        XCTAssertEqual(expense.balanceImpact, -25)
+        let payment = RecurringPayment(name: "Rent", amount: 500, frequency: "Monthly", nextPaymentDate: .now)
+        let paid = ExpenseTransaction(amount: 500, recurringPayment: payment)
+        XCTAssertFalse(paid.isIncome)
+        XCTAssertEqual(paid.balanceImpact, -500)
+    }
+
+    @MainActor
+    func testIncomeAndExpensesUseExactDecimalBalanceWithTransfers() {
+        let wallet = Wallet(name: "Bank", startingBalance: 0, currencyCode: "EUR", walletType: "Bank Account")
+        let other = Wallet(name: "Cash", startingBalance: 0, currencyCode: "EUR", walletType: "Cash")
+        wallet.transactions = [
+            ExpenseTransaction(amount: Decimal(string: "100.10")!, isIncome: true, wallet: wallet),
+            ExpenseTransaction(amount: Decimal(string: "20.05")!, wallet: wallet)
+        ]
+        let transfers = [
+            WalletTransfer(sourceAmount: 10, destinationAmount: 10, sourceWallet: wallet, destinationWallet: other),
+            WalletTransfer(sourceAmount: 5, destinationAmount: 5, sourceWallet: other, destinationWallet: wallet)
+        ]
+        XCTAssertEqual(wallet.currentBalance, Decimal(string: "80.05")!)
+        XCTAssertEqual(wallet.balance(including: transfers), Decimal(string: "75.05")!)
+        XCTAssertEqual(DashboardMetrics.balance(for: wallet, transfers: transfers), wallet.balance(including: transfers))
+        XCTAssertGreaterThanOrEqual(wallet.balance(including: transfers) - 75, wallet.minimumAllowedBalance)
+    }
+
+    @MainActor
+    func testMonthlyIncomeAndCashFlowSeparateCurrenciesAndExcludeOtherDates() {
+        let eur = Wallet(name: "Euro", startingBalance: 1000, currencyCode: "EUR", walletType: "Cash")
+        let huf = Wallet(name: "Forint", startingBalance: 0, currencyCode: "HUF", walletType: "Bank Account")
+        let gbp = Wallet(name: "Pounds", startingBalance: 0, currencyCode: "GBP", walletType: "Cash")
+        let transactions = [
+            ExpenseTransaction(amount: Decimal(string: "50.25")!, isIncome: true, date: date(2026, 10, 1), wallet: eur),
+            ExpenseTransaction(amount: 100, date: date(2026, 10, 2), wallet: eur),
+            ExpenseTransaction(amount: 685000, isIncome: true, date: date(2026, 10, 3), wallet: huf),
+            ExpenseTransaction(amount: 5000, date: date(2026, 10, 4), wallet: huf),
+            ExpenseTransaction(amount: 20, date: date(2026, 10, 5), wallet: gbp),
+            ExpenseTransaction(amount: 300, isIncome: true, date: date(2026, 9, 30), wallet: eur),
+            ExpenseTransaction(amount: 400, isIncome: true, date: date(2026, 10, 8), wallet: eur),
+            ExpenseTransaction(amount: 500, isIncome: true, date: date(2026, 11, 1), wallet: eur),
+            ExpenseTransaction(amount: 900, isIncome: true, date: date(2026, 10, 2))
+        ]
+        let now = date(2026, 10, 7, hour: 12)
+        let income = DashboardMetrics.monthlyIncome(transactions: transactions, wallets: [eur, huf, gbp], now: now, calendar: utcCalendar)
+        let net = DashboardMetrics.monthlyNetCashFlow(transactions: transactions, wallets: [eur, huf, gbp], now: now, calendar: utcCalendar)
+        XCTAssertEqual(income.map(\.currencyCode), ["EUR", "GBP", "HUF"])
+        XCTAssertEqual(income.map(\.amount), [Decimal(string: "50.25")!, 0, 685000])
+        XCTAssertEqual(net.map(\.amount), [Decimal(string: "-49.75")!, -20, 680000])
+        XCTAssertTrue(DashboardMetrics.monthlyIncome(transactions: [], wallets: [], now: now).isEmpty)
+    }
+
+    @MainActor
+    func testIncomeEditingMovingAndDeletionUpdatePersistedWallets() throws {
+        let schema = Schema([
+            Item.self, Wallet.self, ExpenseTransaction.self, SpendingCategory.self,
+            SpendingSubcategory.self, Budget.self, WalletTransfer.self, RecurringPayment.self
+        ])
+        let container = try ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)])
+        let context = ModelContext(container)
+        context.autosaveEnabled = false
+        let bank = Wallet(name: "Bank", startingBalance: 0, currencyCode: "EUR", walletType: "Bank Account")
+        let cash = Wallet(name: "Cash", startingBalance: 10, currencyCode: "EUR", walletType: "Cash")
+        context.insert(bank)
+        context.insert(cash)
+        let income = ExpenseTransaction(amount: 100, isIncome: true, wallet: bank)
+        context.insert(income)
+        try context.save()
+        XCTAssertEqual(bank.currentBalance, 100)
+        XCTAssertNil(income.category)
+
+        income.amount = 150
+        try context.save()
+        XCTAssertEqual(bank.currentBalance, 150)
+
+        income.wallet = cash
+        try context.save()
+        XCTAssertEqual(bank.currentBalance, 0)
+        XCTAssertEqual(cash.currentBalance, 160)
+
+        context.delete(income)
+        try context.save()
+        XCTAssertEqual(bank.currentBalance, 0)
+        XCTAssertEqual(cash.currentBalance, 10)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<ExpenseTransaction>()).isEmpty)
+    }
+
+    @MainActor
+    func testIncomeTypeSurvivesStoreReopen() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let schema = Schema([
+            Item.self, Wallet.self, ExpenseTransaction.self, SpendingCategory.self,
+            SpendingSubcategory.self, Budget.self, WalletTransfer.self, RecurringPayment.self
+        ])
+        let configuration = ModelConfiguration(schema: schema, url: directory.appendingPathComponent("income.store"), cloudKitDatabase: .none)
+        do {
+            let container = try ModelContainer(for: schema, configurations: [configuration])
+            let context = ModelContext(container)
+            context.autosaveEnabled = false
+            let wallet = Wallet(name: "Bank", startingBalance: 10, currencyCode: "EUR", walletType: "Bank Account")
+            context.insert(wallet)
+            context.insert(ExpenseTransaction(amount: 100, isIncome: true, note: "Salary", wallet: wallet))
+            context.insert(ExpenseTransaction(amount: 20, note: "Lunch", wallet: wallet))
+            try context.save()
+        }
+        let reopened = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(reopened)
+        let transactions = try context.fetch(FetchDescriptor<ExpenseTransaction>())
+        XCTAssertEqual(transactions.filter { $0.isIncome }.count, 1)
+        XCTAssertEqual(transactions.filter { !$0.isIncome }.count, 1)
+        let wallet = try XCTUnwrap(context.fetch(FetchDescriptor<Wallet>()).first)
+        XCTAssertEqual(wallet.currentBalance, 90)
     }
 
     private var utcCalendar: Calendar {

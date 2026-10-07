@@ -223,49 +223,7 @@ struct WalletsView: View {
     private func balance(
         for wallet: Wallet
     ) -> Decimal {
-
-        let transfersOut =
-            transfers
-                .filter {
-                    $0.sourceWallet?
-                        .persistentModelID
-                    ==
-                    wallet.persistentModelID
-                }
-                .reduce(
-                    Decimal.zero
-                ) {
-                    result,
-                    transfer in
-
-                    result +
-                    transfer.sourceAmount
-                }
-
-        let transfersIn =
-            transfers
-                .filter {
-                    $0.destinationWallet?
-                        .persistentModelID
-                    ==
-                    wallet.persistentModelID
-                }
-                .reduce(
-                    Decimal.zero
-                ) {
-                    result,
-                    transfer in
-
-                    result +
-                    transfer.destinationAmount
-                }
-
-        return
-            wallet.currentBalance
-            -
-            transfersOut
-            +
-            transfersIn
+        wallet.balance(including: transfers)
     }
 
     private func colorFromName(

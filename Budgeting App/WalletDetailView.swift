@@ -27,47 +27,7 @@ struct WalletDetailView: View {
 
     private var currentBalance:
         Decimal {
-
-        let transfersOut =
-            transfers
-                .filter {
-
-                    $0.sourceWallet?
-                        .persistentModelID
-                    ==
-                    wallet.persistentModelID
-                }
-                .reduce(
-                    Decimal.zero
-                ) {
-
-                    $0 +
-                    $1.sourceAmount
-                }
-
-        let transfersIn =
-            transfers
-                .filter {
-
-                    $0.destinationWallet?
-                        .persistentModelID
-                    ==
-                    wallet.persistentModelID
-                }
-                .reduce(
-                    Decimal.zero
-                ) {
-
-                    $0 +
-                    $1.destinationAmount
-                }
-
-        return
-            wallet.currentBalance
-            -
-            transfersOut
-            +
-            transfersIn
+        wallet.balance(including: transfers)
     }
 
     private var availableAmount:
@@ -246,14 +206,14 @@ struct WalletDetailView: View {
             }
 
             Section(
-                "Recent Expenses"
+                "Recent Transactions"
             ) {
 
                 if recentTransactions
                     .isEmpty {
 
                     Text(
-                        "No expenses from this wallet yet."
+                        "No transactions in this wallet yet."
                     )
                     .foregroundStyle(
                         .secondary
@@ -371,8 +331,9 @@ struct WalletDetailView: View {
             Spacer()
 
             Text(
-                "-\(transaction.amount.formatted(.number)) \(wallet.currencyCode)"
+                "\(transaction.amountSign)\(transaction.amount.formatted(.number)) \(wallet.currencyCode)"
             )
+            .foregroundStyle(transaction.isIncome ? Color.green : Color.primary)
             .fontWeight(
                 .semibold
             )
@@ -414,7 +375,7 @@ struct WalletDetailView: View {
                 category.name
         }
 
-        return "Expense"
+        return transaction.typeName
     }
 
     private func detailRow(

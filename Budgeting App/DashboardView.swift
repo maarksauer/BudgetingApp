@@ -25,6 +25,7 @@ struct DashboardView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
                         monthlySpendingCard(now: timeline.date)
+                        monthlyIncomeCard(now: timeline.date)
                         walletSection
                         budgetSection(now: timeline.date)
                         paymentSection(now: timeline.date)
@@ -61,7 +62,7 @@ struct DashboardView: View {
             transactions: transactions, wallets: wallets, now: now
         )
         let unassignedCount = DashboardMetrics.monthlyTransactions(transactions, now: now)
-            .filter { $0.wallet == nil }.count
+            .filter { !$0.isIncome && $0.wallet == nil }.count
 
         return DashboardCard {
             VStack(alignment: .leading, spacing: 16) {
@@ -108,6 +109,67 @@ struct DashboardView: View {
         .accessibilityIdentifier("monthlySpendingSummary")
     }
 
+    private func monthlyIncomeCard(now: Date) -> some View {
+        let income = DashboardMetrics.monthlyIncome(
+            transactions: transactions, wallets: wallets, now: now
+        )
+        let cashFlow = DashboardMetrics.monthlyNetCashFlow(
+            transactions: transactions, wallets: wallets, now: now
+        )
+        let unassignedCount = DashboardMetrics.monthlyTransactions(transactions, now: now)
+            .filter { $0.isIncome && $0.wallet == nil }.count
+
+        return DashboardCard {
+            VStack(alignment: .leading, spacing: 16) {
+                Label("Income this month", systemImage: "arrow.down.left.circle.fill")
+                    .font(.headline)
+                    .foregroundStyle(.green)
+
+                if income.isEmpty {
+                    Text(unassignedCount == 0 ? "No income this month" : "No wallet totals available")
+                        .font(.title2.weight(.semibold))
+                } else {
+                    ForEach(income) { total in
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(total.amount, format: .currency(code: total.currencyCode))
+                                .font(.title.weight(.bold))
+                                .monospacedDigit()
+                                .minimumScaleFactor(0.7)
+                            Spacer()
+                            Text(total.currencyCode)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Divider()
+                    Text("Net cash flow")
+                        .font(.subheadline.weight(.semibold))
+                    ForEach(cashFlow) { total in
+                        HStack {
+                            Text(total.currencyCode)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text(total.amount, format: .currency(code: total.currencyCode))
+                                .fontWeight(.semibold)
+                                .monospacedDigit()
+                                .foregroundStyle(total.amount < 0 ? Color.red : Color.green)
+                        }
+                    }
+                    Text("Income minus expenses. Wallet transfers are excluded.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if unassignedCount > 0 {
+                    Text("\(unassignedCount) income transactions have no wallet and are excluded from these totals.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .accessibilityIdentifier("monthlyIncomeSummary")
+    }
+
     private var walletSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             sectionHeading("Wallets", action: openWallets)
@@ -116,7 +178,7 @@ struct DashboardView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Label("Start with a wallet", systemImage: "wallet.bifold")
                             .font(.headline)
-                        Text("Add your cash or bank account to start tracking your spending.")
+                        Text("Add your cash or bank account to start tracking your income and spending.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                         Button("Create Wallet") { showingCreateWallet = true }

@@ -80,7 +80,7 @@ struct TransactionDetailView: View {
 
             // MARK: - Expense
 
-            Section("Expense") {
+            Section(transaction.typeName) {
 
                 if isEditing {
 
@@ -254,104 +254,106 @@ struct TransactionDetailView: View {
 
             // MARK: - Category
 
-            Section("Category") {
+            if !transaction.isIncome {
+                Section("Category") {
 
-                if isEditing {
-
-                    Picker(
-                        "Category",
-                        selection:
-                            $selectedCategory
-                    ) {
-
-                        Text(
-                            "Select Category"
-                        )
-                        .tag(
-                            nil as SpendingCategory?
-                        )
-
-                        ForEach(
-                            categories
-                        ) { category in
-
-                            Text(
-                                category.name
-                            )
-                            .tag(
-                                category
-                                    as SpendingCategory?
-                            )
-                        }
-                    }
-                    .onChange(
-                        of: selectedCategory
-                    ) {
-
-                        selectedSubcategoryID =
-                            nil
-                    }
-
-                    if let selectedCategory,
-                       !selectedCategory
-                        .subcategories
-                        .isEmpty {
+                    if isEditing {
 
                         Picker(
-                            "Subcategory",
+                            "Category",
                             selection:
-                                $selectedSubcategoryID
+                                $selectedCategory
                         ) {
 
                             Text(
-                                "None"
+                                "Select Category"
                             )
                             .tag(
-                                nil
-                                    as PersistentIdentifier?
+                                nil as SpendingCategory?
                             )
 
                             ForEach(
-                                selectedCategory
-                                    .subcategories
-                                    .sorted {
-
-                                        $0.name
-                                            .localizedCaseInsensitiveCompare(
-                                                $1.name
-                                            )
-                                        ==
-                                        .orderedAscending
-                                    }
-                            ) { subcategory in
+                                categories
+                            ) { category in
 
                                 Text(
-                                    subcategory.name
+                                    category.name
                                 )
                                 .tag(
-                                    subcategory
-                                        .persistentModelID
-                                        as PersistentIdentifier?
+                                    category
+                                        as SpendingCategory?
                                 )
                             }
                         }
+                        .onChange(
+                            of: selectedCategory
+                        ) {
+
+                            selectedSubcategoryID =
+                                nil
+                        }
+
+                        if let selectedCategory,
+                           !selectedCategory
+                            .subcategories
+                            .isEmpty {
+
+                            Picker(
+                                "Subcategory",
+                                selection:
+                                    $selectedSubcategoryID
+                            ) {
+
+                                Text(
+                                    "None"
+                                )
+                                .tag(
+                                    nil
+                                        as PersistentIdentifier?
+                                )
+
+                                ForEach(
+                                    selectedCategory
+                                        .subcategories
+                                        .sorted {
+
+                                            $0.name
+                                                .localizedCaseInsensitiveCompare(
+                                                    $1.name
+                                                )
+                                            ==
+                                            .orderedAscending
+                                        }
+                                ) { subcategory in
+
+                                    Text(
+                                        subcategory.name
+                                    )
+                                    .tag(
+                                        subcategory
+                                            .persistentModelID
+                                            as PersistentIdentifier?
+                                    )
+                                }
+                            }
+                        }
+
+                    } else {
+
+                        detailRow(
+                            title: "Category",
+                            value:
+                                transaction.category?.name
+                                ?? "None"
+                        )
+
+                        detailRow(
+                            title: "Subcategory",
+                            value:
+                                transaction.subcategory?.name
+                                ?? "None"
+                        )
                     }
-
-                } else {
-
-                    detailRow(
-                        title: "Category",
-                        value:
-                            transaction.category?.name
-                            ?? "None"
-                    )
-
-                    detailRow(
-                        title: "Subcategory",
-                        value:
-                            transaction.subcategory?.name
-                            ?? "None"
-                    )
                 }
             }
 
@@ -593,6 +595,8 @@ struct TransactionDetailView: View {
     private var exceedsAvailableBalance:
         Bool {
 
+        guard !transaction.isIncome else { return false }
+
         guard
             let wallet =
                 selectedWallet,
@@ -618,7 +622,7 @@ struct TransactionDetailView: View {
         guard
             parsedAmount != nil,
             selectedWallet != nil,
-            selectedCategory != nil
+            (transaction.isIncome || selectedCategory != nil)
         else {
 
             return false
@@ -633,51 +637,7 @@ struct TransactionDetailView: View {
     private func walletBalance(
         for wallet: Wallet
     ) -> Decimal {
-
-        let transfersOut =
-            transfers
-                .filter {
-
-                    $0.sourceWallet?
-                        .persistentModelID
-                    ==
-                    wallet
-                        .persistentModelID
-                }
-                .reduce(
-                    Decimal.zero
-                ) {
-
-                    $0
-                    +
-                    $1.sourceAmount
-                }
-
-        let transfersIn =
-            transfers
-                .filter {
-
-                    $0.destinationWallet?
-                        .persistentModelID
-                    ==
-                    wallet
-                        .persistentModelID
-                }
-                .reduce(
-                    Decimal.zero
-                ) {
-
-                    $0
-                    +
-                    $1.destinationAmount
-                }
-
-        return
-            wallet.currentBalance
-            -
-            transfersOut
-            +
-            transfersIn
+        wallet.balance(including: transfers)
     }
 
     // MARK: - Editing Balance
@@ -703,8 +663,7 @@ struct TransactionDetailView: View {
             wallet
                 .persistentModelID {
 
-            current +=
-                transaction.amount
+            current -= transaction.balanceImpact
         }
 
         return current
@@ -762,18 +721,9 @@ struct TransactionDetailView: View {
 
     private func saveChanges() {
 
-        guard
-            let decimalAmount =
-                parsedAmount,
-            let wallet =
-                selectedWallet,
-            let category =
-                selectedCategory,
-            !exceedsAvailableBalance
-        else {
-
-            return
-        }
+        guard canSave,
+              let decimalAmount = parsedAmount,
+              let wallet = selectedWallet else { return }
 
         transaction.amount =
             decimalAmount
@@ -791,10 +741,10 @@ struct TransactionDetailView: View {
             wallet
 
         transaction.category =
-            category
+            transaction.isIncome ? nil : selectedCategory
 
         transaction.subcategory =
-            selectedSubcategory
+            transaction.isIncome ? nil : selectedSubcategory
 
         isEditing =
             false

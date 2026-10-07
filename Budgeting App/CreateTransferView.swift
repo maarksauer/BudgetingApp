@@ -456,47 +456,7 @@ struct CreateTransferView: View {
     private func balance(
         for wallet: Wallet
     ) -> Decimal {
-
-        let transfersOut =
-            transfers
-                .filter {
-
-                    $0.sourceWallet?
-                        .persistentModelID
-                    ==
-                    wallet.persistentModelID
-                }
-                .reduce(
-                    Decimal.zero
-                ) {
-
-                    $0 +
-                    $1.sourceAmount
-                }
-
-        let transfersIn =
-            transfers
-                .filter {
-
-                    $0.destinationWallet?
-                        .persistentModelID
-                    ==
-                    wallet.persistentModelID
-                }
-                .reduce(
-                    Decimal.zero
-                ) {
-
-                    $0 +
-                    $1.destinationAmount
-                }
-
-        return
-            wallet.currentBalance
-            -
-            transfersOut
-            +
-            transfersIn
+        wallet.balance(including: transfers)
     }
 
     private func availableAmount(

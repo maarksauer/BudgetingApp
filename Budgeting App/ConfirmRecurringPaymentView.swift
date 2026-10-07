@@ -246,51 +246,7 @@ struct ConfirmRecurringPaymentView: View {
     private func currentBalance(
         for wallet: Wallet
     ) -> Decimal {
-
-        let outgoing =
-            transfers
-                .filter {
-
-                    $0.sourceWallet?
-                        .persistentModelID
-                    ==
-                    wallet
-                        .persistentModelID
-                }
-                .reduce(
-                    Decimal.zero
-                ) {
-
-                    $0
-                    +
-                    $1.sourceAmount
-                }
-
-        let incoming =
-            transfers
-                .filter {
-
-                    $0.destinationWallet?
-                        .persistentModelID
-                    ==
-                    wallet
-                        .persistentModelID
-                }
-                .reduce(
-                    Decimal.zero
-                ) {
-
-                    $0
-                    +
-                    $1.destinationAmount
-                }
-
-        return
-            wallet.currentBalance
-            -
-            outgoing
-            +
-            incoming
+        wallet.balance(including: transfers)
     }
 
     private func availableAmount(

@@ -39,21 +39,20 @@ final class Wallet {
     }
 
     var currentBalance: Decimal {
+        startingBalance + transactions.reduce(Decimal.zero) {
+            $0 + $1.balanceImpact
+        }
+    }
 
-        let totalExpenses =
-            transactions.reduce(
-                Decimal.zero
-            ) {
-                result,
-                transaction in
-
-                result + transaction.amount
-            }
-
-        return
-            startingBalance
-            -
-            totalExpenses
+    /// All screens use the same income, expense, and transfer calculation.
+    func balance(including transfers: [WalletTransfer]) -> Decimal {
+        let outgoing = transfers.filter {
+            $0.sourceWallet?.persistentModelID == persistentModelID
+        }.reduce(Decimal.zero) { $0 + $1.sourceAmount }
+        let incoming = transfers.filter {
+            $0.destinationWallet?.persistentModelID == persistentModelID
+        }.reduce(Decimal.zero) { $0 + $1.destinationAmount }
+        return currentBalance - outgoing + incoming
     }
 
     var minimumAllowedBalance: Decimal {
