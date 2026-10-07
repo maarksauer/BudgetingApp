@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SettingsView: View {
+    @AppStorage(AppAppearance.storageKey) private var appearance: AppAppearance = .system
 
     var body: some View {
 
@@ -45,11 +46,16 @@ struct SettingsView: View {
 
                 Section("Preferences") {
 
-                    Label(
-                        "Appearance",
-                        systemImage:
-                            "circle.lefthalf.filled"
-                    )
+                    NavigationLink {
+                        AppearanceSettingsView()
+                    } label: {
+                        HStack {
+                            Label("Appearance", systemImage: "circle.lefthalf.filled")
+                            Spacer()
+                            Text(appearance.title).foregroundStyle(.secondary)
+                        }
+                    }
+                    .accessibilityIdentifier("openAppearanceSettings")
 
                     Label(
                         "General",

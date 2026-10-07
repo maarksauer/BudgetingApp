@@ -60,6 +60,17 @@ Tap a wallet, transaction, transfer, budget, or bill to open its existing detail
 6. Add income in EUR as well as HUF and check each currency stays separate. Add a transfer and verify it affects wallet balances without changing cash flow.
 7. Close an unfinished income, change tabs, and reopen Add Transaction; type, amount, and note should be preserved. Restart the app after saving and confirm the income still exists.
 
+## Appearance
+
+Open **More → Appearance** and choose **System**, **Light**, or **Dark**. System follows the device’s current appearance; Light and Dark override it for this app. The choice applies immediately, is shown beside Appearance in More, and is retained after restarting the app. The default is System.
+
+### Check appearance
+
+1. Select Dark and check Home, Transactions, Wallets, Budgets, and their detail screens.
+2. Open Add Transaction and another sheet (such as Create Wallet), and check that the selected theme carries through.
+3. Select Light and repeat. Restart the app and confirm Light remains selected.
+4. Select System, then change the simulator/device appearance; the app should follow it. Confirm the More row and selected checkmark match the choice.
+
 ## CSV export
 
 Open **More → Export Data**. Choose all saved transactions or an inclusive date range, and whether to include wallet transfers. **Save CSV** opens the native file picker. On iPhone and iPad, **Share CSV** opens the native share sheet. Exports with no matching rows are disabled.

@@ -49,6 +49,7 @@
 		CA5ECC8955EAC5026D216230 /* BudgetSchedule.swift in Sources */ = {isa = PBXBuildFile; fileRef = C77EDF399F8AE3B39232C95F /* BudgetSchedule.swift */; };
 		DB52A770C335660E98F21CBA /* ExportDataView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F1F57508CFA77E9BC3A446C /* ExportDataView.swift */; };
 		28155A6C6F164FA5C74475D7 /* TransactionCSVExport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6347DF042A003C85917EC9D /* TransactionCSVExport.swift */; };
+		E9D3E69B1096DE80155602E9 /* AppearanceSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C1881FCA23D09D8A3C14330 /* AppearanceSettingsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -116,6 +117,7 @@
 		C77EDF399F8AE3B39232C95F /* BudgetSchedule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BudgetSchedule.swift; sourceTree = "<group>"; };
 		6F1F57508CFA77E9BC3A446C /* ExportDataView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportDataView.swift; sourceTree = "<group>"; };
 		A6347DF042A003C85917EC9D /* TransactionCSVExport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionCSVExport.swift; sourceTree = "<group>"; };
+		2C1881FCA23D09D8A3C14330 /* AppearanceSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearanceSettingsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -192,6 +194,7 @@
 				86E929B5305D850700AF8F5C /* BudgetingAppApp.swift */,
 				6F1F57508CFA77E9BC3A446C /* ExportDataView.swift */,
 				A6347DF042A003C85917EC9D /* TransactionCSVExport.swift */,
+				2C1881FCA23D09D8A3C14330 /* AppearanceSettingsView.swift */,
 				86E929B6305D850700AF8F5C /* SettingsView.swift */,
 				86E929B7305D850700AF8F5C /* SpendingCategory.swift */,
 				86E929B8305D850700AF8F5C /* SpendingSubcategory.swift */,
@@ -392,6 +395,7 @@
 				546D3D841BC2E5513E9D4189 /* RecurringPaymentsView.swift in Sources */,
 				DB52A770C335660E98F21CBA /* ExportDataView.swift in Sources */,
 				28155A6C6F164FA5C74475D7 /* TransactionCSVExport.swift in Sources */,
+				E9D3E69B1096DE80155602E9 /* AppearanceSettingsView.swift in Sources */,
 				DFBA2814FFBEE2FFA7166EB9 /* SettingsView.swift in Sources */,
 				AE303135B425D7B2F2E393F3 /* SpendingCategory.swift in Sources */,
 				17EDA502EA16BFF71E5FE3EE /* SpendingSubcategory.swift in Sources */,
