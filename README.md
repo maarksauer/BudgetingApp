@@ -60,6 +60,24 @@ Tap a wallet, transaction, transfer, budget, or bill to open its existing detail
 6. Add income in EUR as well as HUF and check each currency stays separate. Add a transfer and verify it affects wallet balances without changing cash flow.
 7. Close an unfinished income, change tabs, and reopen Add Transaction; type, amount, and note should be preserved. Restart the app after saving and confirm the income still exists.
 
+## CSV export
+
+Open **More → Export Data**. Choose all saved transactions or an inclusive date range, and whether to include wallet transfers. **Save CSV** opens the native file picker. On iPhone and iPad, **Share CSV** opens the native share sheet. Exports with no matching rows are disabled.
+
+Choose **Comma** for comma-separated columns and decimal points, or **Semicolon** for semicolon-separated columns and decimal commas (commonly used in Hungarian Excel). If Excel puts everything in one column, use the other format or import the CSV with the matching column and decimal separators.
+
+The CSV includes Date, Type, Wallet, Amount, Currency, Category, Subcategory, Note, Destination Wallet, Destination Amount, Destination Currency, and Recurring Payment. Rows are chronological. Dates are ISO 8601 timestamps in UTC; date-range selection uses the device's local calendar and includes the entire final day. Income is positive and expenses are negative. Each transfer appears once: the source amount is negative and the destination amount is positive, with both currencies retained. Missing names or relationships use empty cells.
+
+Amounts have no currency symbols or thousands separators. UTF-8 with a BOM preserves Hungarian accents in Excel. Quotes and multiline notes are escaped, and formula-like names/notes are exported as literal spreadsheet text. CSV is a transaction report; it does not include starting balances, budget definitions, or upcoming unpaid bills, and it cannot restore the complete app database.
+
+### Check CSV saving and sharing
+
+1. Export a mixture of income, expenses, and a transfer. Open the file in Excel and check amounts, currency columns, and both sides of the single transfer row.
+2. Try both separator formats. Check a fractional EUR amount, an accented wallet/category name, and a note containing a comma, quotation marks, and a newline.
+3. Export a date range and check transactions on the final day are included. Turn off transfers and check the row count and file both exclude them.
+4. Cancel the file picker, then export again. On iPhone/iPad, share the file and return to the app. Verify no transactions or balances changed.
+5. Check an empty date range disables Save/Share and displays its empty state.
+
 ## If Xcode reports undefined symbols after replacing the project
 
 If the linker reports missing `ExpenseTransaction.isIncome`, its new initializer, or `Wallet.balance(including:)`, first choose **Product → Clean Build Folder** (Shift–Command–K), then build again (Command–B). This clears old compiled model files that can remain after replacing source files. The updated ZIP gives app sources fresh timestamps as well.
@@ -91,7 +109,7 @@ xcodebuild -project "Budgeting App.xcodeproj" -scheme "Budgeting App" \
   -derivedDataPath /tmp/budgeting-app-derived test
 ```
 
-The scheme includes twenty unit tests covering wallet balances, overdraft limits, recurring-payment rescheduling, paused payments, monthly totals by currency, transfer amounts, budget date/category/currency matching, bill ordering, and recurring-budget catch-up without duplicate pending periods. Income tests also cover decimal balances with transfers, monthly income/cash flow, spending/budget exclusions, persistent edits and wallet moves, deletion, and store reopening. Dashboard tests also cover category identity and currency separation, subcategory aggregation, excluded dates/income, missing categories/wallets, updates, combined recent activity, limits, and stable ordering. Five UI tests cover Home/navigation, its category and recent sections, reopening expense and income drafts, and keyboard dismissal. Run the UI tests on an iPhone simulator with the software keyboard enabled, where the tab bar is visible. Test sources belong only to their test targets; app sources and assets belong only to the app target. `Info.plist` is processed as build configuration, not copied as a resource.
+The scheme includes twenty-six unit tests covering wallet balances, overdraft limits, recurring-payment rescheduling, paused payments, monthly totals by currency, transfer amounts, budget date/category/currency matching, bill ordering, and recurring-budget catch-up without duplicate pending periods. Income tests also cover decimal balances with transfers, monthly income/cash flow, spending/budget exclusions, persistent edits and wallet moves, deletion, and store reopening. Dashboard tests also cover category identity and currency separation, subcategory aggregation, excluded dates/income, missing categories/wallets, updates, combined recent activity, limits, and stable ordering. CSV tests cover signed amounts, transfer currencies and exclusions, metadata, Unicode/escaping, regional separators, inclusive dates, missing relationships, literal text handling, and stable ordering. Six UI tests cover Home/navigation, its category and recent sections, reopening expense and income drafts, keyboard dismissal, and export options/empty states. Run the UI tests on an iPhone simulator with the software keyboard enabled, where the tab bar is visible. Test sources belong only to their test targets; app sources and assets belong only to the app target. `Info.plist` is processed as build configuration, not copied as a resource.
 
 On Add Transaction, use **Done** above the keyboard or drag the form to dismiss it. The note field's Done/Return key also dismisses the keyboard. Dismissing preserves the entered amount and note. Check this with no wallet configured as well as with a valid expense draft, and verify that you can open another tab afterward without creating a transaction.
 

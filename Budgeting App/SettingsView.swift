@@ -60,11 +60,12 @@ struct SettingsView: View {
 
                 Section("Data") {
 
-                    Label(
-                        "Export Data",
-                        systemImage:
-                            "square.and.arrow.up"
-                    )
+                    NavigationLink {
+                        ExportDataView()
+                    } label: {
+                        Label("Export Data", systemImage: "square.and.arrow.up")
+                    }
+                    .accessibilityIdentifier("openExportData")
                 }
             }
 

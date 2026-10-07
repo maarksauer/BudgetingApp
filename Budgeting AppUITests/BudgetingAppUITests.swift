@@ -136,6 +136,41 @@ final class BudgetingAppUITests: XCTestCase {
     }
 
     @MainActor
+    func testExportDataScreenOptionsAndEmptyState() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launch()
+        app.tabBars.buttons["More"].tap()
+        let export = app.buttons["openExportData"].firstMatch
+        XCTAssertTrue(export.waitForExistence(timeout: 5))
+        export.tap()
+        XCTAssertTrue(app.navigationBars["Export Data"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Rows to export"].exists)
+        let includeTransfers = app.switches["csvIncludeTransfers"]
+        XCTAssertTrue(includeTransfers.exists)
+        includeTransfers.tap()
+        includeTransfers.tap()
+        let dateRange = app.switches["csvUseDateRange"]
+        XCTAssertTrue(dateRange.exists)
+        dateRange.tap()
+        XCTAssertTrue(app.staticTexts["From"].exists)
+        XCTAssertTrue(app.staticTexts["To"].exists)
+        dateRange.tap()
+        XCTAssertTrue(app.staticTexts["All saved transactions"].exists)
+        let save = app.buttons["saveTransactionCSV"]
+        for _ in 0..<6 {
+            if save.isHittable { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(save.exists)
+        XCTAssertTrue(app.buttons["shareTransactionCSV"].exists)
+        if app.staticTexts["No transactions match these options."].exists {
+            XCTAssertFalse(save.isEnabled)
+            XCTAssertFalse(app.buttons["shareTransactionCSV"].isEnabled)
+        }
+    }
+
+    @MainActor
     private func openAddExpense(in app: XCUIApplication) {
         let add = app.buttons["openAddExpense"].firstMatch
         XCTAssertTrue(add.waitForExistence(timeout: 10))

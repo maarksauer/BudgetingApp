@@ -380,6 +380,115 @@ final class BudgetingAppTests: XCTestCase {
         XCTAssertTrue(DashboardMetrics.monthlyCategorySpending(transactions: [], now: now, calendar: utcCalendar).isEmpty)
     }
 
+    @MainActor
+    func testCSVExportCombinesSignedAmountsCurrenciesAndRecurringMetadata() throws {
+        let euro = Wallet(name: "Euro", startingBalance: 100, currencyCode: "EUR", walletType: "Cash")
+        let forint = Wallet(name: "Forint", startingBalance: 0, currencyCode: "HUF", walletType: "Bank Account")
+        let food = SpendingCategory(name: "Food", icon: "fork.knife", colorName: "orange")
+        let lunch = SpendingSubcategory(name: "Lunch", category: food)
+        let bill = RecurringPayment(name: "Subscription", amount: 12, frequency: "Monthly", nextPaymentDate: date(2026, 10, 1))
+        let expense = ExpenseTransaction(amount: Decimal(string: "12.30")!, date: date(2026, 10, 1), note: "Meal", wallet: euro, category: food, subcategory: lunch, recurringPayment: bill)
+        let income = ExpenseTransaction(amount: 685000, isIncome: true, date: date(2026, 10, 2), note: "Salary", wallet: forint)
+        let transfer = WalletTransfer(sourceAmount: 20, destinationAmount: 8000, date: date(2026, 10, 3), note: "Top up", sourceWallet: euro, destinationWallet: forint)
+        let export = TransactionCSVExport.makeExport(transactions: [income, expense], transfers: [transfer])
+        let text = try XCTUnwrap(String(data: export.data, encoding: .utf8))
+        XCTAssertEqual(export.rowCount, 3)
+        XCTAssertTrue(text.contains("\"Expense\",\"Euro\",-12.3,\"EUR\",\"Food\",\"Lunch\",\"Meal\",\"\",\"\",\"\",\"Subscription\""))
+        XCTAssertTrue(text.contains("\"Income\",\"Forint\",685000,\"HUF\""))
+        XCTAssertTrue(text.contains("\"Transfer\",\"Euro\",-20,\"EUR\",\"\",\"\",\"Top up\",\"Forint\",8000,\"HUF\",\"\""))
+        let lines = text.components(separatedBy: "\r\n")
+        XCTAssertTrue(lines[1].hasPrefix("\"2026-10-01T00:00:00.000Z\""))
+        XCTAssertTrue(lines[2].contains("\"Income\""))
+        XCTAssertTrue(lines[3].contains("\"Transfer\""))
+        XCTAssertEqual(euro.startingBalance, 100)
+        XCTAssertEqual(expense.amount, Decimal(string: "12.30")!)
+    }
+
+    @MainActor
+    func testCSVExportEscapesQuotesNewlinesAndPreservesHungarianText() throws {
+        let wallet = Wallet(name: "Bank, account", startingBalance: 0, currencyCode: "HUF", walletType: "Bank Account")
+        let income = ExpenseTransaction(amount: 10, isIncome: true, note: "Árvíztűrő, \"tükör\"\nMásodik sor", wallet: wallet)
+        let export = TransactionCSVExport.makeExport(transactions: [income], transfers: [])
+        let text = try XCTUnwrap(String(data: export.data, encoding: .utf8))
+        XCTAssertEqual(export.data.prefix(3), Data([0xEF, 0xBB, 0xBF]))
+        XCTAssertTrue(text.contains("\"Bank, account\""))
+        XCTAssertTrue(text.contains("\"Árvíztűrő, \"\"tükör\"\"\nMásodik sor\""))
+        XCTAssertTrue(text.hasSuffix("\r\n"))
+        XCTAssertEqual(export.rowCount, 1)
+    }
+
+    @MainActor
+    func testCSVSemicolonFormatUsesDecimalCommasAndSupportsTransferExclusion() throws {
+        let wallet = Wallet(name: "Bank; savings", startingBalance: 100, currencyCode: "EUR", walletType: "Bank Account")
+        let cash = Wallet(name: "Cash", startingBalance: 0, currencyCode: "EUR", walletType: "Cash")
+        let expense = ExpenseTransaction(amount: Decimal(string: "0.05")!, wallet: wallet)
+        let transfer = WalletTransfer(sourceAmount: 10, destinationAmount: 10, sourceWallet: wallet, destinationWallet: cash)
+        let options = TransactionCSVExport.Options(separator: .semicolon, includeTransfers: false)
+        let export = TransactionCSVExport.makeExport(transactions: [expense], transfers: [transfer], options: options)
+        let text = try XCTUnwrap(String(data: export.data, encoding: .utf8))
+        XCTAssertTrue(text.contains("\"Expense\";\"Bank; savings\";-0,05;\"EUR\""))
+        XCTAssertFalse(text.contains("\"Transfer\";"))
+        XCTAssertEqual(export.rowCount, 1)
+        XCTAssertEqual(TransactionCSVExport.rowCount(transactions: [expense], transfers: [transfer], options: options), 1)
+    }
+
+    @MainActor
+    func testCSVDateRangeIncludesWholeBoundaryDaysAndCountsTransfers() throws {
+        let wallet = Wallet(name: "Bank", startingBalance: 100, currencyCode: "EUR", walletType: "Bank Account")
+        let cash = Wallet(name: "Cash", startingBalance: 0, currencyCode: "EUR", walletType: "Cash")
+        let transactions = [
+            ExpenseTransaction(amount: 1, date: date(2026, 10, 1, hour: 23, minute: 59)),
+            ExpenseTransaction(amount: 2, date: date(2026, 10, 2)),
+            ExpenseTransaction(amount: 3, date: date(2026, 10, 3, hour: 23, minute: 59)),
+            ExpenseTransaction(amount: 4, date: date(2026, 10, 4))
+        ]
+        let transfer = WalletTransfer(sourceAmount: 10, destinationAmount: 10, date: date(2026, 10, 3, hour: 23, minute: 59), sourceWallet: wallet, destinationWallet: cash)
+        var options = TransactionCSVExport.Options(startDate: date(2026, 10, 2, hour: 12), endDate: date(2026, 10, 3, hour: 12))
+        let export = TransactionCSVExport.makeExport(transactions: transactions, transfers: [transfer], options: options, calendar: utcCalendar)
+        XCTAssertEqual(export.rowCount, 3)
+        XCTAssertEqual(TransactionCSVExport.rowCount(transactions: transactions, transfers: [transfer], options: options, calendar: utcCalendar), 3)
+        options.startDate = date(2026, 10, 5)
+        XCTAssertEqual(TransactionCSVExport.makeExport(transactions: transactions, transfers: [transfer], options: options, calendar: utcCalendar).rowCount, 0)
+        let empty = TransactionCSVExport.makeExport(transactions: [], transfers: [])
+        let text = try XCTUnwrap(String(data: empty.data, encoding: .utf8))
+        XCTAssertEqual(empty.rowCount, 0)
+        XCTAssertEqual(text.components(separatedBy: "\r\n").count, 2)
+        XCTAssertTrue(text.contains("\"Destination Currency\""))
+    }
+
+    @MainActor
+    func testCSVExportRetainsTransferCurrenciesWhenWalletsAreMissing() throws {
+        let euro = Wallet(name: "Euro", startingBalance: 100, currencyCode: "EUR", walletType: "Cash")
+        let dollar = Wallet(name: "Dollar", startingBalance: 0, currencyCode: "USD", walletType: "Cash")
+        let transfer = WalletTransfer(sourceAmount: 20, destinationAmount: 22, sourceWallet: euro, destinationWallet: dollar)
+        transfer.sourceWallet = nil
+        transfer.destinationWallet = nil
+        let missingWalletExpense = ExpenseTransaction(amount: 5)
+        let export = TransactionCSVExport.makeExport(transactions: [missingWalletExpense], transfers: [transfer])
+        let text = try XCTUnwrap(String(data: export.data, encoding: .utf8))
+        XCTAssertEqual(export.rowCount, 2)
+        XCTAssertTrue(text.contains("\"Transfer\",\"\",-20,\"EUR\",\"\",\"\",\"\",\"\",22,\"USD\",\"\""))
+        XCTAssertTrue(text.contains("\"Expense\",\"\",-5,\"\""))
+    }
+
+    @MainActor
+    func testCSVTreatsFormulaLikeNamesAsTextAndOrdersEqualDatesConsistently() throws {
+        let wallet = Wallet(name: "=1+1", startingBalance: 100, currencyCode: "EUR", walletType: "Cash")
+        let transactions = ["=SUM(A1)", "+note", "-note", "@note", " \t=1"].map {
+            ExpenseTransaction(amount: Decimal(string: "12.30")!, date: date(2026, 10, 7), note: $0, wallet: wallet)
+        }
+        let export = TransactionCSVExport.makeExport(transactions: transactions, transfers: [])
+        let reversed = TransactionCSVExport.makeExport(transactions: Array(transactions.reversed()), transfers: [])
+        XCTAssertEqual(export.data, reversed.data)
+        let text = try XCTUnwrap(String(data: export.data, encoding: .utf8))
+        XCTAssertTrue(text.contains("\"'=1+1\""))
+        for note in ["=SUM(A1)", "+note", "-note", "@note", " \t=1"] {
+            XCTAssertTrue(text.contains("\"'\(note)\""))
+        }
+        XCTAssertTrue(text.contains(",-12.3,"))
+        XCTAssertEqual(transactions.first?.wallet?.name, "=1+1")
+    }
+
     private var utcCalendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
