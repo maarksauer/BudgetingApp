@@ -16,81 +16,93 @@ struct BudgetsView: View {
     @State private var showingPastBudgets = false
     @State private var showingBudgetUpdateError = false
 
+    private let embedded: Bool
+
+    init(embedded: Bool = false) {
+        self.embedded = embedded
+    }
+
     var body: some View {
+        if embedded {
+            content
+        } else {
+            NavigationStack { content }
+        }
+    }
 
-        NavigationStack {
+    private var content: some View {
+        ScrollView {
 
-            ScrollView {
+            if budgets.isEmpty {
 
-                if budgets.isEmpty {
+                emptyState
+                    .padding(.top, 120)
 
-                    emptyState
-                        .padding(.top, 120)
+            } else {
 
-                } else {
-
-                    LazyVStack(
-                        alignment: .leading,
-                        spacing: 24
-                    ) {
-
-                        if !currentBudgets.isEmpty {
-
-                            budgetSection(
-                                title: "Current",
-                                systemImage: "calendar.badge.checkmark",
-                                budgets: currentBudgets
-                            )
-                        }
-
-                        if !upcomingBudgets.isEmpty {
-
-                            budgetSection(
-                                title: "Upcoming",
-                                systemImage: "calendar",
-                                budgets: upcomingBudgets
-                            )
-                        }
-
-                        if !pastBudgets.isEmpty {
-
-                            pastBudgetSection
-                        }
-                    }
-                    .padding()
-                }
-            }
-            .navigationTitle("Budgets")
-
-            .toolbar {
-
-                ToolbarItem(
-                    placement: .primaryAction
+                LazyVStack(
+                    alignment: .leading,
+                    spacing: 24
                 ) {
 
-                    Button {
-                        showingCreateBudget = true
-                    } label: {
-                        Image(systemName: "plus")
+                    if !currentBudgets.isEmpty {
+
+                        budgetSection(
+                            title: "Current",
+                            systemImage: "calendar.badge.checkmark",
+                            budgets: currentBudgets
+                        )
+                    }
+
+                    if !upcomingBudgets.isEmpty {
+
+                        budgetSection(
+                            title: "Upcoming",
+                            systemImage: "calendar",
+                            budgets: upcomingBudgets
+                        )
+                    }
+
+                    if !pastBudgets.isEmpty {
+
+                        pastBudgetSection
                     }
                 }
+                .padding()
             }
+        }
+        .navigationTitle("Budgets")
 
-            .sheet(
-                isPresented: $showingCreateBudget
+        .toolbar {
+
+            ToolbarItem(
+                placement: .primaryAction
             ) {
-                CreateBudgetView()
-            }
 
-            .onAppear {
-                generateRecurringBudgetsIfNeeded()
+                Button {
+                    showingCreateBudget = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .accessibilityLabel("Add Budget")
+                .accessibilityIdentifier("openCreateBudget")
             }
-            .alert("Couldn’t update recurring budgets", isPresented: $showingBudgetUpdateError) {
-                Button("Try Again") { generateRecurringBudgetsIfNeeded() }
-                Button("Close", role: .cancel) { }
-            } message: {
-                Text("Your saved budgets are still available. Try again to create the current recurring periods.")
-            }
+        }
+
+        .sheet(
+            isPresented: $showingCreateBudget
+        ) {
+            CreateBudgetView()
+        }
+
+        .onAppear {
+            generateRecurringBudgetsIfNeeded()
+        }
+        .alert("Couldn’t update recurring budgets", isPresented: $showingBudgetUpdateError) {
+            Button("Try Again") { generateRecurringBudgetsIfNeeded() }
+            Button("Close", role: .cancel) { }
+        } message: {
+            Text("Your saved budgets are still available. Try again to create the current recurring periods.")
         }
     }
 

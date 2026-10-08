@@ -41,7 +41,7 @@ struct DashboardView: View {
                     refreshRecurringBudgets(now: timeline.date)
                 }
             }
-            .navigationTitle("Home")
+            .navigationTitle("Overview")
             .sheet(isPresented: $showingCreateWallet) {
                 CreateWalletView()
             }

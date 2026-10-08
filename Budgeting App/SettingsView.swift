@@ -1,46 +1,33 @@
 import SwiftUI
 
+nonisolated enum MoreRoute: Hashable {
+    case budgets, categories, recurringPayments, currencies, appearance, export, backup
+}
+
 struct SettingsView: View {
+    @Binding var path: [MoreRoute]
     @AppStorage(CurrencyPreferences.storageKey) private var storedCurrencyPreferences = CurrencyPreferences.defaultStorageValue
     @AppStorage(AppAppearance.storageKey) private var appearance: AppAppearance = .system
 
     var body: some View {
-
-        NavigationStack {
-
+        NavigationStack(path: $path) {
             List {
-
                 Section("Organisation") {
+                    NavigationLink(value: MoreRoute.budgets) {
+                        Label("Budgets", systemImage: "chart.pie")
+                    }
+                    .accessibilityIdentifier("openBudgets")
 
-                    NavigationLink {
-
-                        CategoriesView()
-
-                    } label: {
-
-                        Label(
-                            "Categories",
-                            systemImage:
-                                "square.grid.2x2"
-                        )
+                    NavigationLink(value: MoreRoute.categories) {
+                        Label("Categories", systemImage: "square.grid.2x2")
                     }
 
-                    NavigationLink {
-
-                        RecurringPaymentsView()
-
-                    } label: {
-
-                        Label(
-                            "Recurring Payments",
-                            systemImage:
-                                "arrow.trianglehead.2.clockwise.rotate.90"
-                        )
+                    NavigationLink(value: MoreRoute.recurringPayments) {
+                        Label("Recurring Payments", systemImage: "arrow.trianglehead.2.clockwise.rotate.90")
                     }
+                    .accessibilityIdentifier("openRecurringPayments")
 
-                    NavigationLink {
-                        CurrenciesSettingsView()
-                    } label: {
+                    NavigationLink(value: MoreRoute.currencies) {
                         HStack {
                             Label("Currencies", systemImage: "eurosign.circle")
                             Spacer()
@@ -52,10 +39,7 @@ struct SettingsView: View {
                 }
 
                 Section("Preferences") {
-
-                    NavigationLink {
-                        AppearanceSettingsView()
-                    } label: {
+                    NavigationLink(value: MoreRoute.appearance) {
                         HStack {
                             Label("Appearance", systemImage: "circle.lefthalf.filled")
                             Spacer()
@@ -63,35 +47,32 @@ struct SettingsView: View {
                         }
                     }
                     .accessibilityIdentifier("openAppearanceSettings")
-
-                    Label(
-                        "General",
-                        systemImage:
-                            "slider.horizontal.3"
-                    )
                 }
 
                 Section("Data") {
-
-                    NavigationLink {
-                        ExportDataView()
-                    } label: {
+                    NavigationLink(value: MoreRoute.export) {
                         Label("Export Data", systemImage: "square.and.arrow.up")
                     }
                     .accessibilityIdentifier("openExportData")
 
-                    NavigationLink {
-                        BackupRestoreView()
-                    } label: {
+                    NavigationLink(value: MoreRoute.backup) {
                         Label("Backup & Restore", systemImage: "externaldrive")
                     }
                     .accessibilityIdentifier("openBackupRestore")
                 }
             }
-
-            .navigationTitle(
-                "More"
-            )
+            .navigationTitle("More")
+            .navigationDestination(for: MoreRoute.self) { route in
+                switch route {
+                case .budgets: BudgetsView(embedded: true)
+                case .categories: CategoriesView()
+                case .recurringPayments: RecurringPaymentsView()
+                case .currencies: CurrenciesSettingsView()
+                case .appearance: AppearanceSettingsView()
+                case .export: ExportDataView()
+                case .backup: BackupRestoreView()
+                }
+            }
         }
     }
 }

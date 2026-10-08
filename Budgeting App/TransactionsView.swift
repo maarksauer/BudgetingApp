@@ -87,6 +87,7 @@ struct TransactionsView: View {
                 }
             }
 
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle(
                 "Transactions"
             )
@@ -677,214 +678,26 @@ struct TransactionsView: View {
         }
     }
 
-    // MARK: - Expense Row
-
-    private func expenseRow(
-        _ transaction:
-            ExpenseTransaction
-    ) -> some View {
-
-        HStack(
-            spacing: 14
-        ) {
-
-            categoryIcon(
-                for:
-                    transaction
-            )
-
-            VStack(
-                alignment: .leading,
-                spacing: 4
-            ) {
-
-                Text(
-                    displayTitle(
-                        for:
-                            transaction
-                    )
-                )
-                .fontWeight(
-                    .medium
-                )
-
-                HStack(
-                    spacing: 6
-                ) {
-
-                    if let wallet =
-                        transaction.wallet {
-
-                        Text(
-                            wallet.name
-                        )
-
-                        Text("•")
-                    }
-
-                    Text(transaction.typeName)
-                    Text("•")
-
-                    Text(
-                        transaction.date
-                            .formatted(
-                                date:
-                                    .omitted,
-                                time:
-                                    .shortened
-                            )
-                    )
-                }
-                .font(.caption)
-                .foregroundStyle(
-                    .secondary
-                )
-            }
-
-            Spacer()
-
-            VStack(
-                alignment: .trailing,
-                spacing: 3
-            ) {
-
-                Text(
-                    "\(transaction.amountSign)\(transaction.amount.formatted(.number))"
-                )
-                .foregroundStyle(transaction.isIncome ? Color.green : Color.primary)
-                .fontWeight(
-                    .semibold
-                )
-
-                Text(
-                    transaction.wallet?
-                        .currencyCode
-                    ?? ""
-                )
-                .font(.caption)
-                .foregroundStyle(
-                    .secondary
-                )
-            }
-        }
-        .padding(
-            .vertical,
-            4
+    private func expenseRow(_ transaction: ExpenseTransaction) -> some View {
+        TransactionSummaryRow(
+            title: displayTitle(for: transaction),
+            subtitle: transaction.isIncome ? "Income" : "Expense · \(transaction.subcategory?.name ?? transaction.category?.name ?? "Uncategorized")",
+            detail: "\(transaction.wallet?.name ?? "Missing wallet") · \(transaction.date.formatted(date: .omitted, time: .shortened))",
+            symbol: transaction.isIncome ? "arrow.down.left" : (transaction.category?.icon ?? "creditcard.fill"),
+            tint: transaction.isIncome ? .green : FormPalette.color(transaction.category?.colorName ?? "gray"),
+            amount: "\(transaction.amountSign)\(transaction.amount.formatted(.number))",
+            currency: transaction.wallet?.currencyCode ?? "", secondaryAmount: nil
         )
+        .accessibilityIdentifier("transactionRow-\(transaction.note)")
     }
 
-    // MARK: - Transfer Row
-
-    private func transferRow(
-        _ transfer:
-            WalletTransfer
-    ) -> some View {
-
-        HStack(
-            spacing: 14
-        ) {
-
-            Image(
-                systemName:
-                    "arrow.left.arrow.right"
-            )
-            .foregroundStyle(
-                .blue
-            )
-            .frame(
-                width: 40,
-                height: 40
-            )
-            .background(
-                .blue.opacity(0.12)
-            )
-            .clipShape(
-                RoundedRectangle(
-                    cornerRadius: 11
-                )
-            )
-
-            VStack(
-                alignment: .leading,
-                spacing: 4
-            ) {
-
-                Text(
-                    "\(transfer.sourceWallet?.name ?? "Wallet") → \(transfer.destinationWallet?.name ?? "Wallet")"
-                )
-                .fontWeight(
-                    .medium
-                )
-
-                if transfer.note.isEmpty {
-
-                    Text("Transfer")
-                        .font(.caption)
-                        .foregroundStyle(
-                            .secondary
-                        )
-
-                } else {
-
-                    Text(
-                        transfer.note
-                    )
-                    .font(.caption)
-                    .foregroundStyle(
-                        .secondary
-                    )
-                }
-            }
-
-            Spacer()
-
-            VStack(
-                alignment: .trailing,
-                spacing: 3
-            ) {
-
-                if transfer.sourceCurrencyCode
-                    ==
-                    transfer.destinationCurrencyCode {
-
-                    Text(
-                        transfer.sourceAmount,
-                        format: .number
-                    )
-                    .fontWeight(
-                        .semibold
-                    )
-
-                    Text(
-                        transfer.sourceCurrencyCode
-                    )
-                    .font(.caption)
-                    .foregroundStyle(
-                        .secondary
-                    )
-
-                } else {
-
-                    Text(
-                        "\(transfer.sourceAmount.formatted(.number)) \(transfer.sourceCurrencyCode)"
-                    )
-                    .fontWeight(
-                        .semibold
-                    )
-
-                    Text(
-                        "→ \(transfer.destinationAmount.formatted(.number)) \(transfer.destinationCurrencyCode)"
-                    )
-                    .font(.caption)
-                    .foregroundStyle(
-                        .secondary
-                    )
-                }
-            }
-        }
-        .padding(
-            .vertical,
-            4
+    private func transferRow(_ transfer: WalletTransfer) -> some View {
+        TransactionSummaryRow(
+            title: "\(transfer.sourceWallet?.name ?? "Wallet") → \(transfer.destinationWallet?.name ?? "Wallet")",
+            subtitle: "Transfer", detail: transfer.note.isEmpty ? transfer.date.formatted(date: .omitted, time: .shortened) : transfer.note,
+            symbol: "arrow.left.arrow.right", tint: .blue,
+            amount: "−\(transfer.sourceAmount.formatted(.number))", currency: transfer.sourceCurrencyCode,
+            secondaryAmount: "+\(transfer.destinationAmount.formatted(.number)) \(transfer.destinationCurrencyCode)"
         )
     }
 
@@ -920,67 +733,6 @@ struct TransactionsView: View {
         }
 
         return transaction.typeName
-    }
-
-    @ViewBuilder
-    private func categoryIcon(
-        for transaction:
-            ExpenseTransaction
-    ) -> some View {
-
-        if transaction.isIncome {
-            Image(systemName: "arrow.down.left")
-                .foregroundStyle(.white)
-                .frame(width: 40, height: 40)
-                .background(Color.green)
-                .clipShape(RoundedRectangle(cornerRadius: 11))
-        } else if let category =
-            transaction.category {
-
-            Image(
-                systemName:
-                    category.icon
-            )
-            .foregroundStyle(
-                .white
-            )
-            .frame(
-                width: 40,
-                height: 40
-            )
-            .background(
-                colorFromName(
-                    category.colorName
-                )
-            )
-            .clipShape(
-                RoundedRectangle(
-                    cornerRadius: 11
-                )
-            )
-
-        } else {
-
-            Image(
-                systemName:
-                    "creditcard.fill"
-            )
-            .foregroundStyle(
-                .white
-            )
-            .frame(
-                width: 40,
-                height: 40
-            )
-            .background(
-                .gray
-            )
-            .clipShape(
-                RoundedRectangle(
-                    cornerRadius: 11
-                )
-            )
-        }
     }
 
     // MARK: - Empty States
@@ -1110,44 +862,7 @@ struct TransactionsView: View {
             Date()
     }
 
-    // MARK: - Colors
-
-    private func colorFromName(
-        _ name: String
-    ) -> Color {
-
-        switch name {
-
-        case "blue":
-            return .blue
-
-        case "green":
-            return .green
-
-        case "orange":
-            return .orange
-
-        case "purple":
-            return .purple
-
-        case "red":
-            return .red
-
-        case "pink":
-            return .pink
-
-        case "teal":
-            return .teal
-
-        case "gray":
-            return .gray
-
-        default:
-            return .blue
-        }
-    }
 }
-
 
 // MARK: - Combined Activity
 

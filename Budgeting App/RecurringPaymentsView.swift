@@ -2,6 +2,11 @@ import SwiftUI
 import SwiftData
 
 struct RecurringPaymentsView: View {
+    @Environment(\.modelContext) private var modelContext
+    @State private var showingSaveError = false
+    @State private var showingPostponeError = false
+    @State private var saveError = ""
+
 
     @Query(
         sort: \RecurringPayment.scheduledPaymentDate
@@ -130,6 +135,8 @@ struct RecurringPaymentsView: View {
                         systemName: "plus"
                     )
                 }
+                .accessibilityLabel("Add Recurring Payment")
+                .accessibilityIdentifier("openCreateRecurringPayment")
             }
         }
 
@@ -151,89 +158,21 @@ struct RecurringPaymentsView: View {
             )
         }
 
-        // MARK: - Postpone Options
-
-        .confirmationDialog(
-            "Postpone Payment",
-            isPresented:
-                Binding(
-                    get: {
-
-                        paymentToPostpone != nil
-                        &&
-                        !showingCustomPostponeDate
-                    },
-
-                    set: { newValue in
-
-                        if !newValue &&
-                            !showingCustomPostponeDate {
-
-                            paymentToPostpone = nil
-                        }
-                    }
-                ),
-            titleVisibility:
-                .visible
-        ) {
-
-            Button(
-                "1 Day"
-            ) {
-
-                postponeSelectedPayment(
-                    byDays: 1
-                )
+        .confirmationDialog("Postpone Payment", isPresented: Binding(
+            get: { paymentToPostpone != nil && !showingCustomPostponeDate },
+            set: { visible in
+                if !visible && !showingCustomPostponeDate { paymentToPostpone = nil }
             }
-
-            Button(
-                "3 Days"
-            ) {
-
-                postponeSelectedPayment(
-                    byDays: 3
-                )
+        ), titleVisibility: .visible) {
+            if let payment = paymentToPostpone {
+                Button("1 Day") { postponeSelectedPayment(payment, byDays: 1) }
+                Button("3 Days") { postponeSelectedPayment(payment, byDays: 3) }
+                Button("1 Week") { postponeSelectedPayment(payment, byDays: 7) }
+                Button("2 Weeks") { postponeSelectedPayment(payment, byDays: 14) }
+                Button("Choose Date…") { prepareCustomPostponeDate(payment) }
             }
-
-            Button(
-                "1 Week"
-            ) {
-
-                postponeSelectedPayment(
-                    byDays: 7
-                )
-            }
-
-            Button(
-                "2 Weeks"
-            ) {
-
-                postponeSelectedPayment(
-                    byDays: 14
-                )
-            }
-
-            Button(
-                "Choose Date…"
-            ) {
-
-                prepareCustomPostponeDate()
-            }
-
-            Button(
-                "Cancel",
-                role: .cancel
-            ) {
-
-                paymentToPostpone = nil
-            }
-
-        } message: {
-
-            Text(
-                "Choose how long to postpone this payment."
-            )
-        }
+            Button("Cancel", role: .cancel) { paymentToPostpone = nil }
+        } message: { Text("Choose how long to postpone this payment.") }
 
         // MARK: - Custom Postpone Date
 
@@ -262,7 +201,7 @@ struct RecurringPaymentsView: View {
                             selection:
                                 $customPostponeDate,
                             in:
-                                Date()...,
+                                Calendar.current.startOfDay(for: Date())...,
                             displayedComponents:
                                 .date
                         )
@@ -322,52 +261,23 @@ struct RecurringPaymentsView: View {
                         }
                     }
                 }
+                .alert("Couldn’t postpone payment", isPresented: $showingPostponeError) {
+                    Button("OK", role: .cancel) { }
+                } message: { Text("Your selected date is still here. \(saveError)") }
             }
         }
 
-        // MARK: - Skip
-
-        .alert(
-            "Skip This Payment?",
-            isPresented:
-                Binding(
-                    get: {
-
-                        paymentToSkip != nil
-                    },
-
-                    set: { newValue in
-
-                        if !newValue {
-
-                            paymentToSkip = nil
-                        }
-                    }
-                )
-        ) {
-
-            Button(
-                "Cancel",
-                role: .cancel
-            ) {
-
-                paymentToSkip = nil
+        .alert("Skip This Payment?", isPresented: Binding(
+            get: { paymentToSkip != nil }, set: { visible in if !visible { paymentToSkip = nil } }
+        )) {
+            Button("Cancel", role: .cancel) { paymentToSkip = nil }
+            if let payment = paymentToSkip {
+                Button("Skip", role: .destructive) { skipSelectedPayment(payment) }
             }
-
-            Button(
-                "Skip",
-                role: .destructive
-            ) {
-
-                skipSelectedPayment()
-            }
-
-        } message: {
-
-            Text(
-                "No transaction will be created. The payment will move to its next scheduled occurrence."
-            )
-        }
+        } message: { Text("No transaction will be created. The payment will move to its next scheduled occurrence.") }
+        .alert("Couldn’t save changes", isPresented: $showingSaveError) {
+            Button("OK", role: .cancel) { }
+        } message: { Text("Please try again. \(saveError)") }
     }
 
     // MARK: - Payment Groups
@@ -453,9 +363,10 @@ struct RecurringPaymentsView: View {
             spacing: 12
         ) {
 
-            recurringPaymentRow(
-                payment
-            )
+            NavigationLink { RecurringPaymentDetailView(payment: payment) } label: {
+                recurringPaymentRow(payment)
+            }
+            .accessibilityIdentifier("recurringPayment-\(payment.name)")
 
             HStack(
                 spacing: 10
@@ -580,110 +491,23 @@ struct RecurringPaymentsView: View {
         )
     }
 
-    // MARK: - Standard Row
-
-    private func recurringPaymentRow(
-        _ payment: RecurringPayment
-    ) -> some View {
-
-        VStack(
-            alignment: .leading,
-            spacing: 8
-        ) {
-
-            HStack {
-
-                VStack(
-                    alignment: .leading,
-                    spacing: 3
-                ) {
-
-                    Text(
-                        payment.name
-                    )
-                    .fontWeight(
-                        .semibold
-                    )
-
-                    Text(
-                        payment.frequency
-                    )
-                    .font(
-                        .caption
-                    )
-                    .foregroundStyle(
-                        .secondary
-                    )
-                }
-
-                Spacer()
-
-                statusBadge(
-                    payment
-                )
-            }
-
-            HStack {
-
-                Text(
-                    "\(payment.amount.formatted(.number)) \(payment.wallet?.currencyCode ?? "")"
-                )
-                .fontWeight(
-                    .medium
-                )
-
-                Spacer()
-
-                Text(
-                    paymentDateText(
-                        payment
-                    )
-                )
-                .font(
-                    .caption
-                )
-                .foregroundStyle(
-                    paymentDateColor(
-                        payment
-                    )
-                )
-            }
-
-            HStack(
-                spacing: 6
-            ) {
-
-                if let wallet =
-                    payment.wallet {
-
-                    Label(
-                        wallet.name,
-                        systemImage:
-                            "wallet.bifold"
-                    )
-                }
-
-                if let category =
-                    payment.category {
-
-                    Text(
-                        "•"
-                    )
-
-                    Label(
-                        category.name,
-                        systemImage:
-                            category.icon
-                    )
-                }
-            }
-            .font(
-                .caption
+    private func recurringPaymentRow(_ payment: RecurringPayment) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            TransactionSummaryRow(
+                title: payment.name, subtitle: "\(payment.frequency) · \(payment.category?.name ?? "Uncategorized")",
+                detail: payment.wallet?.name ?? "Missing wallet",
+                symbol: payment.category?.icon ?? "arrow.trianglehead.2.clockwise.rotate.90",
+                tint: FormPalette.color(payment.category?.colorName ?? "blue"),
+                amount: payment.amount.formatted(.number), currency: payment.wallet?.currencyCode ?? "", secondaryAmount: nil
             )
-            .foregroundStyle(
-                .secondary
-            )
+            HStack(alignment: .top) {
+                Label(paymentDateText(payment), systemImage: "calendar")
+                    .font(.caption).foregroundStyle(paymentDateColor(payment))
+                Spacer()
+                statusBadge(payment)
+            }
         }
+        .padding(.vertical, 4)
     }
 
     // MARK: - Empty State
@@ -865,210 +689,33 @@ struct RecurringPaymentsView: View {
         return .secondary
     }
 
-    // MARK: - Postpone
-
-    private func postponeSelectedPayment(
-        byDays days: Int
-    ) {
-
-        guard
-            let payment =
-                paymentToPostpone
-        else {
-
-            return
+    private func postponeSelectedPayment(_ payment: RecurringPayment, byDays days: Int) {
+        let start = max(payment.nextPaymentDate, Date())
+        if let date = Calendar.current.date(byAdding: .day, value: days, to: start) {
+            do { try FormStore.postponeRecurringPayment(payment, until: date, context: modelContext) }
+            catch { saveError = error.localizedDescription; showingSaveError = true }
         }
-
-        let startingDate =
-            max(
-                payment.nextPaymentDate,
-                Date()
-            )
-
-        if let newDate =
-            Calendar.current.date(
-                byAdding:
-                    .day,
-                value:
-                    days,
-                to:
-                    startingDate
-            ) {
-
-            payment.postponedUntil =
-                newDate
-        }
-
-        paymentToPostpone =
-            nil
+        paymentToPostpone = nil
     }
 
-    // MARK: - Custom Postpone Date
-
-    private func prepareCustomPostponeDate() {
-
-        guard
-            let payment =
-                paymentToPostpone
-        else {
-
-            return
-        }
-
-        let tomorrow =
-            Calendar.current.date(
-                byAdding:
-                    .day,
-                value:
-                    1,
-                to:
-                    Date()
-            )
-            ??
-            Date()
-
-        customPostponeDate =
-            max(
-                payment.nextPaymentDate,
-                tomorrow
-            )
-
-        showingCustomPostponeDate =
-            true
+    private func prepareCustomPostponeDate(_ payment: RecurringPayment) {
+        paymentToPostpone = payment
+        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
+        customPostponeDate = max(payment.nextPaymentDate, tomorrow)
+        showingCustomPostponeDate = true
     }
 
     private func applyCustomPostponeDate() {
-
-        guard
-            let payment =
-                paymentToPostpone
-        else {
-
-            showingCustomPostponeDate =
-                false
-
-            return
-        }
-
-        payment.postponedUntil =
-            customPostponeDate
-
-        paymentToPostpone =
-            nil
-
-        showingCustomPostponeDate =
-            false
+        guard let payment = paymentToPostpone else { return }
+        do {
+            try FormStore.postponeRecurringPayment(payment, until: customPostponeDate, context: modelContext)
+            paymentToPostpone = nil; showingCustomPostponeDate = false
+        } catch { saveError = error.localizedDescription; showingPostponeError = true }
     }
 
-    // MARK: - Skip
-
-    private func skipSelectedPayment() {
-
-        guard
-            let payment =
-                paymentToSkip
-        else {
-
-            return
-        }
-
-        payment.scheduledPaymentDate =
-            nextScheduledDate(
-                for:
-                    payment,
-                from:
-                    payment.scheduledPaymentDate
-            )
-
-        payment.postponedUntil =
-            nil
-
-        paymentToSkip =
-            nil
-    }
-
-    // MARK: - Next Scheduled Date
-
-    private func nextScheduledDate(
-        for payment:
-            RecurringPayment,
-        from date:
-            Date
-    ) -> Date {
-
-        let calendar =
-            Calendar.current
-
-        switch payment.frequency {
-
-        case "Weekly":
-
-            return calendar.date(
-                byAdding:
-                    .weekOfYear,
-                value:
-                    1,
-                to:
-                    date
-            )
-            ??
-            date
-
-        case "Monthly":
-
-            return calendar.date(
-                byAdding:
-                    .month,
-                value:
-                    1,
-                to:
-                    date
-            )
-            ??
-            date
-
-        case "Every 3 Months":
-
-            return calendar.date(
-                byAdding:
-                    .month,
-                value:
-                    3,
-                to:
-                    date
-            )
-            ??
-            date
-
-        case "Every 6 Months":
-
-            return calendar.date(
-                byAdding:
-                    .month,
-                value:
-                    6,
-                to:
-                    date
-            )
-            ??
-            date
-
-        case "Yearly":
-
-            return calendar.date(
-                byAdding:
-                    .year,
-                value:
-                    1,
-                to:
-                    date
-            )
-            ??
-            date
-
-        default:
-
-            return date
-        }
+    private func skipSelectedPayment(_ payment: RecurringPayment) {
+        do { try FormStore.skipRecurringPayment(payment, context: modelContext) }
+        catch { saveError = error.localizedDescription; showingSaveError = true }
+        paymentToSkip = nil
     }
 }

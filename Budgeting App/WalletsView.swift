@@ -72,6 +72,8 @@ struct WalletsView: View {
                                 "plus"
                         )
                     }
+                    .accessibilityLabel("Add Wallet")
+                    .accessibilityIdentifier("openCreateWallet")
                 }
             }
 

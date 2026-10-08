@@ -17,13 +17,15 @@ BudgetingApp/
 └── README.md
 ```
 
-## Home dashboard
+## Overview and navigation
 
-The app opens on Home with this month's spending, income and net cash flow, wallet balances, recent transactions, spending by category, current budget progress, and the next active recurring bills. Currencies have separate spending totals. Wallet balances include transfers, budget spending matches its categories/currency/date range, and bills use their postponed dates when applicable. Overdue bills appear first; paused bills are excluded.
+The app opens on **Add Transaction**. The dock is **Overview · Transactions · + · Wallets · More**, with a larger central + button that opens the full-page transaction form. Budgets are available under **More → Budgets** and from **Overview → Current budgets → See all**. Switching tabs keeps your unfinished transaction for the current app session. A fresh app launch starts on Add Transaction.
 
-Tap a wallet, transaction, transfer, budget, or bill to open its existing detail screen, or use **See all** to open the full list. Recurring monthly budgets catch up on Home as well as on Budgets.
+Overview shows this month's spending, income and net cash flow, wallet balances, recent transactions, spending by category, current budget progress, and the next active recurring bills. Currencies have separate spending totals. Wallet balances include transfers, budget spending matches its categories/currency/date range, and bills use their postponed dates when applicable. Overdue bills appear first; paused bills are excluded.
 
-**Add Transaction** is available above the tab bar on each main screen. Choose **Expense** or **Income** at the top. Income needs a positive amount and a wallet; use the source/note field for Salary, Refund, or another description. Income does not require a spending category or sufficient existing funds. Expenses retain their category and balance-limit checks. **Close** returns to the screen you were using and keeps the unfinished transaction, including its type, for the current app session. The keyboard's **Done** button still dismisses it without saving.
+Tap a wallet, transaction, transfer, budget, or bill to open its existing detail screen, or use **See all** to open the full list. Recurring monthly budgets catch up on Overview as well as on Budgets.
+
+On **Add Transaction**, choose **Expense** or **Income** at the top. Income needs a positive amount and a wallet; use the source/note field for Salary, Refund, or another description. Income does not require a spending category or sufficient existing funds. Expenses retain their category and balance-limit checks. Switch tabs and return using **+** to resume the unfinished transaction, including its type, amount, note, date and selections. The keyboard's **Done** button dismisses it without saving. The dock hides while the keyboard is open and returns when it is dismissed. Successful saves clear the amount/note for the next transaction and keep you on the Add page.
 
 ## Recent transactions and spending by category
 
@@ -31,19 +33,19 @@ Tap a wallet, transaction, transfer, budget, or bill to open its existing detail
 - Tap a row to open its existing detail screen for editing or deletion. **See all** opens the Transactions tab with its search and filters.
 - **Spending by category** groups this month's expenses by category and currency. Each currency has its own total, amounts, and percentage bars. Categories appear from highest spending to lowest. Subcategories contribute to their parent category; categories with identical names remain distinct.
 - Expenses with no category, including those whose category was deleted, appear as **Uncategorized**. Expenses with no wallet are excluded, with an explanatory count. Income and transfers never contribute to the breakdown.
-- Empty states appear when there is no activity or no monthly spending. Changes made from a transaction detail screen update Home through the existing SwiftData queries.
+- Empty states appear when there is no activity or no monthly spending. Changes made from a transaction detail screen update Overview through the existing SwiftData queries.
 
-### Check the updated Home
+### Check the updated Overview
 
 1. Add two HUF expenses of 3,000 and 2,000 to Food, and 1,000 to Transport. Food should show 5,000 HUF (83%) and Transport 1,000 HUF (17%) when these are the only expenses this month.
 2. Add an EUR expense and verify it gets a separate currency card. Add income and a transfer; both should appear in recent transactions without increasing category spending.
-3. Tap an expense, an income, and a transfer from Home and check their detail screens. Edit an expense amount and return to Home to verify the category total updates. Delete a transaction and check it disappears from recent transactions.
-4. Use **Recent transactions → See all** to open Transactions. Check empty Home states and the layout with large text, long category names, and long notes.
+3. Tap an expense, an income, and a transfer from Overview and check their detail screens. Edit an expense amount and return to Overview to verify the category total updates. Delete a transaction and check it disappears from recent transactions.
+4. Use **Recent transactions → See all** to open Transactions. Check empty Overview states and the layout with large text, long category names, and long notes.
 
 ## Income support
 
 - Wallet balance is starting balance + income − expenses − outgoing transfers + incoming transfers. All wallet, expense, bill-payment, and transfer screens share the same calculation.
-- Home shows income and net cash flow (income minus expenses) separately for each currency. Transfers do not count as income or spending.
+- Overview shows income and net cash flow (income minus expenses) separately for each currency. Transfers do not count as income or spending.
 - Income appears with a green plus amount and an income label in Transactions, and a green plus amount in wallet history. Searching for `income` or `expense` matches the transaction type as well as existing search fields.
 - Open an income transaction to edit its amount, date, note, or wallet, or to delete it. Its transaction type stays fixed when editing. Reducing, moving, or deleting income adjusts the affected balances, even if that exposes a negative balance; expense and transfer creation still enforce each wallet's spending limit.
 - Income never uses up a category budget. Recurring bill payments continue to create expenses.
@@ -53,12 +55,52 @@ Tap a wallet, transaction, transfer, budget, or bill to open its existing detail
 ### Try this in Xcode
 
 1. Run this version over your existing installation and confirm old expenses, wallets, budgets, and recurring bills still load.
-2. On **Add Transaction → Income**, save Salary of **685,000 HUF** into a wallet. Its balance and Home income should increase by 685,000 HUF, while spending and budgets stay the same.
+2. On **Add Transaction → Income**, save Salary of **685,000 HUF** into a wallet. Its balance and Overview income should increase by 685,000 HUF, while spending and budgets stay the same.
 3. Record an expense of **5,000 HUF** from that wallet. With just these two transactions this month, net cash flow should be **680,000 HUF**.
 4. Check income can be saved into an empty wallet without selecting a category. Check income works with an overdrawn wallet and a credit-card wallet as well.
-5. Edit the income amount and then move it to another wallet of the same currency; verify both balances. Delete it and verify that it no longer appears in Home income or wallet history.
+5. Edit the income amount and then move it to another wallet of the same currency; verify both balances. Delete it and verify that it no longer appears in Overview income or wallet history.
 6. Add income in EUR as well as HUF and check each currency stays separate. Add a transfer and verify it affects wallet balances without changing cash flow.
-7. Close an unfinished income, change tabs, and reopen Add Transaction; type, amount, and note should be preserved. Restart the app after saving and confirm the income still exists.
+7. Switch tabs with an unfinished income, then return using +; type, amount, and note should be preserved. Restart the app after saving and confirm the income still exists.
+
+## Refined transactions and recurring payments
+
+Add Transaction and transaction editing share a large amount field, wallet menus with icons, and directly selectable category tiles. Subcategories remain optional. Expense/Income choices have direction icons, income keeps its source/note field, and the primary Add/Save action is highlighted in the navigation bar. A fresh installation can create its first wallet directly from Add Transaction. Transaction and recurring-payment rows show readable category icons, separate amounts/currencies, wallet details, and clear dates/status. At accessibility text sizes, amounts move below the description.
+
+New/Edit Recurring Payment uses the same amount, wallet, category, and note controls, with a payment name and repeat schedule. Name-field Next focuses the amount; note-field Done/Return dismisses the keyboard. Every transaction and recurring payment amount keyboard has **Done**, and dragging the form dismisses it. Dismissal preserves entries and never saves. Cancel in an editor discards changes, and starting Edit again reloads the saved values. Positive amounts use the same strict decimal parser as wallet/budget forms; partial numbers such as `12abc`, zero, negatives, and ambiguous separators cannot be saved.
+
+Transaction additions/edits, recurring payment creation/edits, and confirmation now save explicitly. A failed save keeps the form and draft available, restores the previous records, and shows an error. Existing pending changes are saved before the form mutation; autosave is paused during that mutation and restored afterward. New related models are constructed within that protected save. The transaction's income/expense type stays fixed while editing. Expense limits include transfers and exclude the expense's original amount when validating its edit; income does not require available spending funds.
+
+Creating or editing a recurring payment does not spend money or require the future amount to be available today. Confirm Payment checks the wallet's available funds/credit, accepts an actual amount/date, and commits the expense and schedule advance together. Its initial amount uses canonical decimal text, independent of the device's display separators. Confirmation/Skip advance from the original scheduled date, keeping the existing weekly/monthly/quarterly/half-year/yearly rules. Postponements clear after confirmation/skip; editing the scheduled day clears a postponement, while changing only other fields keeps it. Pause, Resume, Postpone, Skip, Delete, and Revert also save explicitly and roll back on failure. Deleting a recurring payment preserves completed history; reverting a linked transaction restores its previous scheduled/postponed state only after saving succeeds. Due and postponed rows now open their detail page as well as offering quick actions.
+
+### Check transactions and recurring payments
+
+1. With a funded wallet, add an expense and income. Check the larger amount field, category tiles, subcategories, and Add action in Light/Dark appearance and with large text. Switch tabs with a draft and return; fields should remain.
+2. Try `1 000,50`, `1000.50`, `0`, `-5`, and `12abc`. Valid positive amounts should save exactly; invalid amounts should disable Add/Save/Confirm and show a message. Check a wallet with transfers and a credit/overdraft limit.
+3. Edit a transaction's amount, note, date, wallet, and category. Use Done/Return and drag dismissal without saving. Cancel, reopen Edit, and verify its prior values. Save, restart, and verify balances and records persist.
+4. Create a recurring payment with a positive amount, name, wallet, category, and schedule. Check Next/Done/Return. Cancel an edit, then save a separate edit. With insufficient current funds, creating the schedule should still work while confirming payment remains disabled.
+5. Confirm a due/postponed bill with a different actual amount. Check one expense appears, the balance updates, and the next date follows the original schedule. Cancel confirmation and verify no expense or date change. Confirm again from the details page.
+6. Postpone using quick choices and Choose Date, skip, pause/resume, revert a completed payment, and delete a recurring payment. Verify the intended date/status/balance/history after each action and after restarting. Completed history should remain when the schedule is deleted.
+7. Run the injected-failure unit tests in Xcode. They check rollback/retry, exact amounts, prior pending changes, transaction wallet moves, retained postponements/history, confirmation and reversion as a single save, and failed deletions/controls. The two additional UI tests exercise creation/editing/confirmation, keyboard controls, validation, cancellation, and saved form values.
+
+## Refined wallet and budget forms
+
+New/Edit Wallet and New/Edit Budget now share consistent form layouts, live previews, labeled amounts, inline validation, and navigation-bar **Create** or **Save** actions. Wallet appearance has one section with readable icon names and color swatches. Previews show a wallet's starting balance or a budget's limit; they do not change records until saved. The inactive General row has been removed from More, and add-wallet/add-budget buttons have explicit accessibility labels.
+
+Each form has **Done** above the keyboard and interactive keyboard dismissal by dragging the form. Done preserves typed fields and does not save or close the form. Name-field Next moves to the amount field. Cancel discards the form's changes without changing the wallet or budget record.
+
+Amounts accept a decimal point or comma, optional leading sign where applicable, and properly grouped spaces (including nonbreaking spaces) for thousands. For example, `1 000,50` and `1000.50` both represent 1000.50. Inputs such as `12abc`, `12 34`, mixed decimal/grouping separators, nonfinite values, or values that would silently lose decimal precision are rejected. Wallet starting balance accepts zero or negative values as before; budget totals and credit/overdraft limits must be greater than zero. A budget's end date must be on or after its start date. Moving the start past the end also moves the end to that day.
+
+Create and Save dismiss only after explicit persistence succeeds. If saving fails, the form stays open with its typed entries and displays an error. The pending form mutation is rolled back before autosave resumes, so a failed attempt cannot later silently persist or create duplicates. Existing pending changes are flushed before the form mutation. Wallet currency remains fixed after creation. Editing recurring budgets still offers This Budget Only or This & Future Budgets; past periods, other series, category choices, and future periods' dates are retained.
+
+### Check the refined forms
+
+1. Start a wallet and enter its name, starting balance, and currency. Check the live preview, friendly icon choices, and color swatches in both Light and Dark appearance. Check long names and larger accessibility text.
+2. Use Done above each keyboard, then drag the form to dismiss it. Values should remain filled and no record should be created. Create from the navigation bar, restart the app, and verify the wallet persists.
+3. Try `1 000,50`, `1000.50`, zero, and a negative starting balance. Try `12abc`, `12 34`, or `1.000,50`; invalid input should show an inline message and disable Create/Save.
+4. Select Credit Card, check that negative balances are enabled, and enter a positive credit limit. Change to another wallet type and check its balance-rule choices. Edit an existing wallet and Cancel; its prior name/balance/style should remain.
+5. Create and edit a budget. Zero or an invalid amount should disable saving. Move the start date beyond the end date and check the end follows it. Create/Save should work once the name, amount and period are valid.
+6. Edit a recurring series using each scope. This Budget Only should retain later periods' settings. This & Future Budgets should update their name, amount, currency and recurrence while keeping their dates and categories. Earlier periods should remain unchanged.
+7. Saving failures are covered by injected-failure unit tests; run the test suite in Xcode to check rollback, retained drafts, and retry behavior. Check the wallet/budget keyboard UI test with the software keyboard enabled.
 
 ## Currency management
 
@@ -72,7 +114,7 @@ New backups use format version 2 and include the added list, enabled currencies,
 
 ### Check currencies
 
-1. Open Currencies → Other Currencies, search `JPY`, tick it, and choose Done. JPY should appear under Added Currencies with its switch on. Select JPY as the default. Start a new wallet; JPY should be selected and available. Save a sample wallet and check its balance/currency on Home and Wallets.
+1. Open Currencies → Other Currencies, search `JPY`, tick it, and choose Done. JPY should appear under Added Currencies with its switch on. Select JPY as the default. Start a new wallet; JPY should be selected and available. Save a sample wallet and check its balance/currency on Overview and Wallets.
 2. Start a new budget and check JPY is selected. Create a JPY expense and check it contributes only to JPY spending/budgets.
 3. Switch JPY off while its wallet exists. Its row should remain visible with its switch off, and turning it on again should work. A fresh wallet form should omit JPY and use the new default; the existing wallet, its history, and its budgets should retain JPY. Budget pickers should still offer it.
 4. Leave only one enabled currency and check its toggle is disabled. Re-enable other currencies, restart the app, and verify the added list, off switches, and default persist. Open Other Currencies and change some ticks, then Cancel; the main list should not change.
@@ -85,7 +127,7 @@ Open **More → Appearance** and choose **System**, **Light**, or **Dark**. Syst
 
 ### Check appearance
 
-1. Select Dark and check Home, Transactions, Wallets, Budgets, and their detail screens.
+1. Select Dark and check Overview, Transactions, Wallets, Budgets, and their detail screens.
 2. Open Add Transaction and another sheet (such as Create Wallet), and check that the selected theme carries through.
 3. Select Light and repeat. Restart the app and confirm Light remains selected.
 4. Select System, then change the simulator/device appearance; the app should follow it. Confirm the More row and selected checkmark match the choice.
@@ -96,7 +138,7 @@ Open **More → Backup & Restore → Save Backup** to save a versioned JSON file
 
 **Choose Backup to Restore** reads and validates the file, then shows its creation date, appearance, currency preferences when included, and record counts. Review it and choose **Restore This Backup → Replace & Restore**. Canceling either review or confirmation leaves the current data unchanged. Restoration replaces the complete dataset rather than merging it; restoring the same file twice does not duplicate records. An empty backup explicitly warns that restoring it clears the current data.
 
-Before replacement, the app saves a complete recovery copy of the current data. If that copy cannot be written, restoration does not proceed. After a successful restore, the app returns to Home, reloads the tab hierarchy, clears unfinished transaction drafts, and applies the backed-up appearance and included currency preferences. Recurring budgets continue their usual automatic catch-up behavior when Home opens. **More → Backup & Restore → Before Last Restore** lets you save or review the recovery copy. Restoring it follows the same review/confirmation flow and keeps the dataset it replaces as the next recovery copy. Save recovery copies you want to keep; the next restore attempt replaces the internal copy.
+Before replacement, the app saves a complete recovery copy of the current data. If that copy cannot be written, restoration does not proceed. After a successful restore, the app returns to Add Transaction, reloads the tab hierarchy, clears unfinished transaction drafts, and applies the backed-up appearance and included currency preferences. Recurring budgets continue their usual automatic catch-up behavior when Overview or Budgets opens. **More → Backup & Restore → Before Last Restore** lets you save or review the recovery copy. Restoring it follows the same review/confirmation flow and keeps the dataset it replaces as the next recovery copy. Save recovery copies you want to keep; the next restore attempt replaces the internal copy.
 
 The importer rejects unrelated JSON/CSV files, unsupported versions, incomplete records, duplicate identifiers, missing record references, invalid dates, and invalid or imprecise amounts. Files are limited to 32 MB and 100,000 records. All deletes/inserts are committed in a single model-context save with autosave temporarily disabled; failure rolls back the pending replacement. Appearance changes only after that save succeeds. This restores app records, appearance, and included currency preferences, not device signing settings or permissions.
 
@@ -159,10 +201,10 @@ xcodebuild -project "Budgeting App.xcodeproj" -scheme "Budgeting App" \
   -derivedDataPath /tmp/budgeting-app-derived test
 ```
 
-The scheme includes thirty-four unit tests covering wallet balances, overdraft limits, recurring-payment rescheduling, paused payments, monthly totals by currency, transfer amounts, budget date/category/currency matching, bill ordering, and recurring-budget catch-up without duplicate pending periods. Income tests also cover decimal balances with transfers, monthly income/cash flow, spending/budget exclusions, persistent edits and wallet moves, deletion, and store reopening. Dashboard tests also cover category identity and currency separation, subcategory aggregation, excluded dates/income, missing categories/wallets, updates, combined recent activity, limits, and stable ordering. Backup tests cover complete graph/decimal round trips, malformed or oversized files, unsupported versions, missing/duplicate references, rollback after a failed commit, repeated and empty restoration, persistent store reopening, currency-preference round trips, version 1 compatibility, and invalid currency settings. CSV tests cover signed amounts, transfer currencies and exclusions, metadata, Unicode/escaping, regional separators, inclusive dates, missing relationships, literal text handling, and stable ordering. Seven UI tests cover Home/navigation, its category and recent sections, reopening expense and income drafts, keyboard dismissal, export options/empty states, and backup navigation/actions. Run the UI tests on an iPhone simulator with the software keyboard enabled, where the tab bar is visible. Test sources belong only to their test targets; app sources and assets belong only to the app target. `Info.plist` is processed as build configuration, not copied as a resource.
+The scheme includes forty-six unit tests covering wallet balances, overdraft limits, recurring-payment rescheduling, paused payments, monthly totals by currency, transfer amounts, budget date/category/currency matching, bill ordering, and recurring-budget catch-up without duplicate pending periods. Income tests also cover decimal balances with transfers, monthly income/cash flow, spending/budget exclusions, persistent edits and wallet moves, deletion, and store reopening. Dashboard tests also cover category identity and currency separation, subcategory aggregation, excluded dates/income, missing categories/wallets, updates, combined recent activity, limits, and stable ordering. Backup tests cover complete graph/decimal round trips, malformed or oversized files, unsupported versions, missing/duplicate references, rollback after a failed commit, repeated and empty restoration, persistent store reopening, currency-preference round trips, version 1 compatibility, and invalid currency settings. Transaction/recurring form tests cover protected creations, edits, wallet moves, confirmation/revert, pause/postpone/skip, deletion with preserved history, exact amounts and failure/retry. Form tests also cover strict full-input decimal parsing, grouped regional amounts, precision-loss rejection, explicit saves, preserved prior changes, rollback/retry for creations and series edits, fixed wallet currency, and recurring-period scope. CSV tests cover signed amounts, transfer currencies and exclusions, metadata, Unicode/escaping, regional separators, inclusive dates, missing relationships, literal text handling, and stable ordering. Ten UI tests cover the Add Transaction landing page, the central dock, Overview and More/Budgets navigation, its category and recent sections, reopening expense and income drafts, keyboard dismissal, export options/empty states, backup navigation/actions, wallet/budget form keyboard dismissal and validation, and transaction/recurring creation, editing, confirmation, and cancellation. Run the UI tests on an iPhone simulator with the software keyboard enabled, where the dock is visible after dismissing the keyboard. Test sources belong only to their test targets; app sources and assets belong only to the app target. `Info.plist` is processed as build configuration, not copied as a resource.
 
 On Add Transaction, use **Done** above the keyboard or drag the form to dismiss it. The note field's Done/Return key also dismisses the keyboard. Dismissing preserves the entered amount and note. Check this with no wallet configured as well as with a valid expense draft, and verify that you can open another tab afterward without creating a transaction.
 
-Check Home with no data, with wallets in multiple currencies, with incoming/outgoing transfers, with an overspent budget, and with overdue/postponed/paused bills. Confirm that saving an expense refreshes the spending and budget cards. Close an unfinished expense, open another tab, and reopen Add Transaction to verify that its draft remains.
+Check Overview with no data, with wallets in multiple currencies, with incoming/outgoing transfers, with an overspent budget, and with overdue/postponed/paused bills. Confirm that saving an expense refreshes the spending and budget cards. Leave an unfinished expense by switching tabs, then return using + to verify that its draft remains.
 
 For a physical device or distribution, configure your own signing team in Xcode. Build and test commands above still need validation on macOS; Linux checks only establish project structure and file-reference integrity.

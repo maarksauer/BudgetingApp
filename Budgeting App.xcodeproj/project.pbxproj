@@ -54,6 +54,11 @@
 		4AAF2AC39FA9EA2ABB2FFB0E /* BackupRestoreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFE85085ED1E24B903C5D2A1 /* BackupRestoreView.swift */; };
 		1E440F5B469981E796642F50 /* CurrencyPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C0D61707342A294760D115D /* CurrencyPreferences.swift */; };
 		51F5DDB89358F7D438F0D6FC /* CurrenciesSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70429AD9EF733B50D58FAD3F /* CurrenciesSettingsView.swift */; };
+		F21684F9EE6E9F392FACBDFD /* AmountInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = 238D5D95992C71920F3E8F2F /* AmountInput.swift */; };
+		79236A6AD89531ECE0A0C1C0 /* FormStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27C0A710BA1BF0942AC68DCB /* FormStore.swift */; };
+		2902FA9AC02A670ACA728B51 /* FormFields.swift in Sources */ = {isa = PBXBuildFile; fileRef = A85F0D5B5A0D1D0991090CA4 /* FormFields.swift */; };
+		592AAE774823538640238A0A /* TransactionFormFields.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80C395EE7911C525727D320C /* TransactionFormFields.swift */; };
+		C4D4EB046B32BEB266FE6DED /* RecurringSchedule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CE8918EE48493812E2043D9 /* RecurringSchedule.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -126,6 +131,11 @@
 		CFE85085ED1E24B903C5D2A1 /* BackupRestoreView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupRestoreView.swift; sourceTree = "<group>"; };
 		0C0D61707342A294760D115D /* CurrencyPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrencyPreferences.swift; sourceTree = "<group>"; };
 		70429AD9EF733B50D58FAD3F /* CurrenciesSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrenciesSettingsView.swift; sourceTree = "<group>"; };
+		238D5D95992C71920F3E8F2F /* AmountInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AmountInput.swift; sourceTree = "<group>"; };
+		27C0A710BA1BF0942AC68DCB /* FormStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormStore.swift; sourceTree = "<group>"; };
+		A85F0D5B5A0D1D0991090CA4 /* FormFields.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormFields.swift; sourceTree = "<group>"; };
+		80C395EE7911C525727D320C /* TransactionFormFields.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionFormFields.swift; sourceTree = "<group>"; };
+		3CE8918EE48493812E2043D9 /* RecurringSchedule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurringSchedule.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -207,6 +217,11 @@
 				CFE85085ED1E24B903C5D2A1 /* BackupRestoreView.swift */,
 				0C0D61707342A294760D115D /* CurrencyPreferences.swift */,
 				70429AD9EF733B50D58FAD3F /* CurrenciesSettingsView.swift */,
+				238D5D95992C71920F3E8F2F /* AmountInput.swift */,
+				27C0A710BA1BF0942AC68DCB /* FormStore.swift */,
+				A85F0D5B5A0D1D0991090CA4 /* FormFields.swift */,
+				80C395EE7911C525727D320C /* TransactionFormFields.swift */,
+				3CE8918EE48493812E2043D9 /* RecurringSchedule.swift */,
 				86E929B6305D850700AF8F5C /* SettingsView.swift */,
 				86E929B7305D850700AF8F5C /* SpendingCategory.swift */,
 				86E929B8305D850700AF8F5C /* SpendingSubcategory.swift */,
@@ -412,6 +427,11 @@
 				4AAF2AC39FA9EA2ABB2FFB0E /* BackupRestoreView.swift in Sources */,
 				1E440F5B469981E796642F50 /* CurrencyPreferences.swift in Sources */,
 				51F5DDB89358F7D438F0D6FC /* CurrenciesSettingsView.swift in Sources */,
+				F21684F9EE6E9F392FACBDFD /* AmountInput.swift in Sources */,
+				79236A6AD89531ECE0A0C1C0 /* FormStore.swift in Sources */,
+				2902FA9AC02A670ACA728B51 /* FormFields.swift in Sources */,
+				592AAE774823538640238A0A /* TransactionFormFields.swift in Sources */,
+				C4D4EB046B32BEB266FE6DED /* RecurringSchedule.swift in Sources */,
 				DFBA2814FFBEE2FFA7166EB9 /* SettingsView.swift in Sources */,
 				AE303135B425D7B2F2E393F3 /* SpendingCategory.swift in Sources */,
 				17EDA502EA16BFF71E5FE3EE /* SpendingSubcategory.swift in Sources */,

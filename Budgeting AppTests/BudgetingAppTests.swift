@@ -740,6 +740,365 @@ final class BudgetingAppTests: XCTestCase {
         XCTAssertThrowsError(try AppBackup.decode(JSONSerialization.data(withJSONObject: incompleteJSON)))
     }
 
+    func testAmountInputAcceptsBothDecimalSeparatorsAndExactSpaceGroupedAmounts() throws {
+        let inputs: [(String, String)] = [
+            ("685 000,50", "685000.5"), ("1\u{00A0}234.05", "1234.05"),
+            ("1\u{202F}234,05", "1234.05"), (" -12,30 ", "-12.3"),
+            (".05", "0.05"), (",05", "0.05"), ("+100.00", "100"),
+            ("00012.300", "12.3"), ("0", "0"),
+            ("123456789012345678901234567890.12345678", "123456789012345678901234567890.12345678")
+        ]
+        for (input, expected) in inputs {
+            XCTAssertEqual(try XCTUnwrap(AmountInput.parse(input), input), Decimal(string: expected)!, input)
+        }
+        XCTAssertNil(AmountInput.parse("-1", allowNegative: false))
+        XCTAssertNil(AmountInput.positive("0"))
+        XCTAssertNil(AmountInput.positive("-1"))
+    }
+
+    func testAmountInputRejectsPartialAmbiguousNonfiniteAndRoundedNumbers() {
+        for input in ["", " ", "12abc", "12 EUR", "1.000,50", "1,000.50", "12 34", "1  000", "12\n34", "--1", "+", "1.", "1,", "NaN", "Infinity", "1e3", "123456789012345678901234567890123456789.12"] {
+            XCTAssertNil(AmountInput.parse(input), input)
+        }
+        XCTAssertNil(AmountInput.parse("0." + String(repeating: "0", count: 150) + "1"))
+    }
+
+    @MainActor
+    func testWalletFormSavesExactValuesAndFailedEditKeepsPreviousData() throws {
+        let context = try backupContext()
+        var draft = WalletFormDraft(name: "  Bank  ", startingBalance: "1 000,05", currencyCode: "EUR",
+                                    walletType: "Credit Card", icon: "creditcard.fill", colorName: "purple",
+                                    allowsNegativeBalance: false, negativeBalanceLimit: "250,10")
+        let wallet = try FormStore.createWallet(draft, context: context)
+        XCTAssertEqual(wallet.name, "Bank")
+        XCTAssertEqual(wallet.startingBalance, Decimal(string: "1000.05")!)
+        XCTAssertTrue(wallet.allowsNegativeBalance)
+        XCTAssertEqual(wallet.minimumAllowedBalance, Decimal(string: "-250.1")!)
+        let income = ExpenseTransaction(amount: 20, isIncome: true, wallet: wallet)
+        context.insert(income)
+        // This prior pending transaction must survive rollback of the wallet edit.
+        draft.name = "Revised Bank"; draft.startingBalance = "2 000,25"
+        context.autosaveEnabled = true
+        XCTAssertThrowsError(try FormStore.updateWallet(wallet, draft: draft, context: context) { staged in
+            XCTAssertFalse(staged.autosaveEnabled)
+            throw CocoaError(.fileWriteOutOfSpace)
+        })
+        XCTAssertEqual(wallet.name, "Bank")
+        XCTAssertEqual(wallet.startingBalance, Decimal(string: "1000.05")!)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<ExpenseTransaction>()).count, 1)
+        XCTAssertEqual(draft.name, "Revised Bank")
+        XCTAssertEqual(draft.startingBalance, "2 000,25")
+        XCTAssertTrue(context.autosaveEnabled)
+        XCTAssertFalse(context.hasChanges)
+        try FormStore.updateWallet(wallet, draft: draft, context: context)
+        XCTAssertEqual(wallet.name, "Revised Bank")
+        XCTAssertEqual(wallet.currentBalance, Decimal(string: "2020.25")!)
+        draft.currencyCode = "HUF"
+        XCTAssertThrowsError(try FormStore.updateWallet(wallet, draft: draft, context: context))
+        XCTAssertEqual(wallet.currencyCode, "EUR")
+    }
+
+    @MainActor
+    func testBudgetFormFutureEditPreservesEarlierPeriodsCategoriesAndFutureDates() throws {
+        let context = try backupContext()
+        let series = UUID()
+        let category = SpendingCategory(name: "Food", icon: "fork.knife", colorName: "orange")
+        let periods = [9, 10, 11].map { month in
+            Budget(name: "Food", totalAmount: 100, currencyCode: "EUR", startDate: date(2026, month, 1),
+                   endDate: date(2026, month, 28), isRecurring: true, seriesID: series)
+        }
+        for period in periods { period.categories = [category]; context.insert(period) }
+        let unrelated = Budget(name: "Other", totalAmount: 200, currencyCode: "EUR",
+                               startDate: date(2026, 11, 1), endDate: date(2026, 11, 28))
+        context.insert(unrelated)
+        try context.save()
+        var draft = BudgetFormDraft(budget: periods[1])
+        draft.name = "  Revised  "; draft.amount = "250,75"; draft.currencyCode = "HUF"
+        draft.startDate = date(2026, 10, 3); draft.endDate = date(2026, 10, 30)
+        draft.isRecurring = false
+        try FormStore.updateBudget(periods[1], draft: draft, includeFuture: true, context: context)
+        XCTAssertEqual(periods[0].name, "Food")
+        XCTAssertEqual(periods[0].totalAmount, 100)
+        for period in periods.dropFirst() {
+            XCTAssertEqual(period.name, "Revised")
+            XCTAssertEqual(period.totalAmount, Decimal(string: "250.75")!)
+            XCTAssertEqual(period.currencyCode, "HUF")
+            XCTAssertFalse(period.isRecurring)
+            XCTAssertEqual(period.seriesID, series)
+            XCTAssertEqual(period.categories.first?.persistentModelID, category.persistentModelID)
+        }
+        XCTAssertEqual(periods[1].startDate, date(2026, 10, 3))
+        XCTAssertEqual(periods[1].endDate, date(2026, 10, 30))
+        XCTAssertEqual(periods[2].startDate, date(2026, 11, 1))
+        XCTAssertEqual(periods[2].endDate, date(2026, 11, 28))
+        XCTAssertEqual(unrelated.totalAmount, 200)
+        draft.amount = "300"
+        try FormStore.updateBudget(periods[1], draft: draft, includeFuture: false, context: context)
+        XCTAssertEqual(periods[1].totalAmount, 300)
+        XCTAssertEqual(periods[2].totalAmount, Decimal(string: "250.75")!)
+        draft.endDate = date(2026, 9, 1)
+        XCTAssertThrowsError(try FormStore.updateBudget(periods[1], draft: draft, includeFuture: true, context: context))
+        XCTAssertEqual(periods[1].endDate, date(2026, 10, 30))
+    }
+
+    @MainActor
+    func testFailedFormCreationsAndSeriesEditsLeaveNoPartialChanges() throws {
+        let context = try backupContext()
+        let walletDraft = WalletFormDraft(name: "Cash", startingBalance: "10", currencyCode: "EUR")
+        XCTAssertThrowsError(try FormStore.createWallet(walletDraft, context: context) { _ in
+            throw CocoaError(.fileWriteOutOfSpace)
+        })
+        XCTAssertEqual(try context.fetch(FetchDescriptor<Wallet>()).count, 0)
+        let budgetDraft = BudgetFormDraft(name: "Food", amount: "100", currencyCode: "EUR",
+                                         startDate: date(2026, 10, 1), endDate: date(2026, 10, 31), isRecurring: true)
+        XCTAssertThrowsError(try FormStore.createBudget(budgetDraft, context: context) { _ in
+            throw CocoaError(.fileWriteOutOfSpace)
+        })
+        XCTAssertEqual(try context.fetch(FetchDescriptor<Budget>()).count, 0)
+        let current = try FormStore.createBudget(budgetDraft, context: context)
+        let future = Budget(name: "Food", totalAmount: 100, currencyCode: "EUR", startDate: date(2026, 11, 1),
+                            endDate: date(2026, 11, 30), isRecurring: true, seriesID: current.seriesID)
+        context.insert(future); try context.save()
+        var changed = BudgetFormDraft(budget: current)
+        changed.amount = "500"; changed.name = "Changed"; changed.endDate = date(2026, 10, 20)
+        XCTAssertThrowsError(try FormStore.updateBudget(current, draft: changed, includeFuture: true, context: context) { _ in
+            throw CocoaError(.fileWriteOutOfSpace)
+        })
+        XCTAssertEqual(current.name, "Food")
+        XCTAssertEqual(current.totalAmount, 100)
+        XCTAssertEqual(current.endDate, date(2026, 10, 31))
+        XCTAssertEqual(future.name, "Food")
+        XCTAssertEqual(future.totalAmount, 100)
+        XCTAssertEqual(changed.amount, "500")
+        XCTAssertFalse(context.hasChanges)
+        XCTAssertFalse(context.autosaveEnabled)
+        try FormStore.updateBudget(current, draft: changed, includeFuture: true, context: context)
+        let persisted = ModelContext(context.container)
+        let rows = try persisted.fetch(FetchDescriptor<Budget>())
+        XCTAssertEqual(rows.count, 2)
+        XCTAssertTrue(rows.allSatisfy { $0.name == "Changed" && $0.totalAmount == 500 })
+    }
+
+    @MainActor
+    func testTransactionSaveFailureKeepsDraftAndPriorPendingIncomeWithoutDuplicateExpenses() throws {
+        let context = try backupContext()
+        let wallet = Wallet(name: "Bank", startingBalance: 100, currencyCode: "EUR", walletType: "Bank Account")
+        let category = SpendingCategory(name: "Food", icon: "fork.knife", colorName: "orange")
+        context.insert(wallet); context.insert(category); try context.save()
+        let priorIncome = ExpenseTransaction(amount: 10, isIncome: true, wallet: wallet)
+        context.insert(priorIncome)
+        var draft = ExpenseDraft()
+        draft.amount = "12,25"; draft.note = "  Lunch  "
+        draft.selectedWallet = wallet; draft.selectedCategory = category
+        context.autosaveEnabled = true
+        XCTAssertThrowsError(try FormStore.createTransaction(draft, context: context) { staged in
+            XCTAssertFalse(staged.autosaveEnabled)
+            throw CocoaError(.fileWriteOutOfSpace)
+        })
+        XCTAssertTrue(context.autosaveEnabled)
+        XCTAssertFalse(context.hasChanges)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<ExpenseTransaction>()).count, 1)
+        XCTAssertEqual(wallet.currentBalance, 110)
+        XCTAssertEqual(draft.amount, "12,25")
+        XCTAssertEqual(draft.note, "  Lunch  ")
+        let saved = try FormStore.createTransaction(draft, context: context)
+        XCTAssertEqual(saved.note, "Lunch")
+        XCTAssertEqual(saved.amount, Decimal(string: "12.25")!)
+        XCTAssertEqual(wallet.currentBalance, Decimal(string: "97.75")!)
+        XCTAssertEqual(try ModelContext(context.container).fetch(FetchDescriptor<ExpenseTransaction>()).count, 2)
+        var incomeDraft = ExpenseDraft()
+        incomeDraft.isIncome = true; incomeDraft.amount = "1 000,00"; incomeDraft.selectedWallet = wallet
+        let income = try FormStore.createTransaction(incomeDraft, context: context)
+        XCTAssertTrue(income.isIncome)
+        XCTAssertNil(income.category)
+        XCTAssertEqual(wallet.currentBalance, Decimal(string: "1097.75")!)
+        draft.amount = "12abc"
+        XCTAssertThrowsError(try FormStore.createTransaction(draft, context: context))
+    }
+
+    @MainActor
+    func testTransactionEditUsesOriginalAmountAndTransferLimitsAndRollsBackWalletMoves() throws {
+        let context = try backupContext()
+        let bank = Wallet(name: "Bank", startingBalance: 100, currencyCode: "EUR", walletType: "Bank Account")
+        let cash = Wallet(name: "Cash", startingBalance: 20, currencyCode: "EUR", walletType: "Cash")
+        let category = SpendingCategory(name: "Food", icon: "fork.knife", colorName: "orange")
+        context.insert(bank); context.insert(cash); context.insert(category)
+        let transfer = WalletTransfer(sourceAmount: 30, destinationAmount: 30, sourceWallet: bank, destinationWallet: cash)
+        context.insert(transfer)
+        let expense = ExpenseTransaction(amount: 40, note: "Original", wallet: bank, category: category)
+        context.insert(expense); try context.save()
+        var draft = ExpenseDraft(transaction: expense)
+        draft.amount = "70"
+        try FormStore.updateTransaction(expense, draft: draft, context: context)
+        XCTAssertEqual(bank.balance(including: [transfer]), 0)
+        draft.amount = "71"
+        XCTAssertThrowsError(try FormStore.updateTransaction(expense, draft: draft, context: context))
+        draft.selectedWallet = cash; draft.amount = "50"; draft.note = "Moved"
+        XCTAssertThrowsError(try FormStore.updateTransaction(expense, draft: draft, context: context) { _ in
+            throw CocoaError(.fileWriteOutOfSpace)
+        })
+        XCTAssertEqual(expense.wallet?.persistentModelID, bank.persistentModelID)
+        XCTAssertEqual(expense.amount, 70)
+        XCTAssertEqual(expense.note, "Original")
+        XCTAssertEqual(draft.note, "Moved")
+        try FormStore.updateTransaction(expense, draft: draft, context: context)
+        XCTAssertEqual(bank.balance(including: [transfer]), 70)
+        XCTAssertEqual(cash.balance(including: [transfer]), 0)
+        draft.isIncome = true
+        XCTAssertThrowsError(try FormStore.updateTransaction(expense, draft: draft, context: context))
+    }
+
+    @MainActor
+    func testRecurringCreationDoesNotSpendFundsAndFailedCreationLeavesNoRecord() throws {
+        let context = try backupContext()
+        let wallet = Wallet(name: "Bank", startingBalance: 0, currencyCode: "EUR", walletType: "Bank Account")
+        let category = SpendingCategory(name: "Bills", icon: "doc.text.fill", colorName: "red")
+        context.insert(wallet); context.insert(category); try context.save()
+        var draft = RecurringPaymentFormDraft()
+        draft.name = "  Rent  "; draft.details.amount = "1 000,50"
+        draft.details.selectedWallet = wallet; draft.details.selectedCategory = category
+        draft.scheduledDate = date(2026, 10, 15)
+        XCTAssertThrowsError(try FormStore.createRecurringPayment(draft, context: context) { _ in
+            throw CocoaError(.fileWriteOutOfSpace)
+        })
+        XCTAssertEqual(try context.fetch(FetchDescriptor<RecurringPayment>()).count, 0)
+        XCTAssertFalse(context.hasChanges)
+        XCTAssertEqual(draft.details.amount, "1 000,50")
+        let payment = try FormStore.createRecurringPayment(draft, context: context)
+        XCTAssertEqual(payment.name, "Rent")
+        XCTAssertEqual(payment.amount, Decimal(string: "1000.5")!)
+        XCTAssertEqual(wallet.currentBalance, 0)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<ExpenseTransaction>()).count, 0)
+        XCTAssertThrowsError(try FormStore.confirmRecurringPayment(payment, amount: "1000,50", date: Date(), context: context))
+        XCTAssertEqual(payment.scheduledPaymentDate, date(2026, 10, 15))
+    }
+
+    @MainActor
+    func testRecurringEditRollbackRetainsPostponementAndHistoryAndDateChangeClearsIt() throws {
+        let context = try backupContext()
+        let payment = try paymentFormFixture(context)
+        payment.isActive = false
+        payment.postponedUntil = date(2026, 2, 3)
+        let history = ExpenseTransaction(amount: 5, wallet: payment.wallet, category: payment.category, recurringPayment: payment)
+        context.insert(history); try context.save()
+        var draft = RecurringPaymentFormDraft(payment: payment)
+        draft.name = "Updated"; draft.details.amount = "10,75"; draft.details.note = "  Revised  "
+        XCTAssertThrowsError(try FormStore.updateRecurringPayment(payment, draft: draft, context: context) { _ in
+            throw CocoaError(.fileWriteOutOfSpace)
+        })
+        XCTAssertEqual(payment.name, "Bill")
+        XCTAssertEqual(payment.amount, 5)
+        XCTAssertEqual(payment.postponedUntil, date(2026, 2, 3))
+        XCTAssertEqual(draft.details.amount, "10,75")
+        XCTAssertFalse(context.hasChanges)
+        try FormStore.updateRecurringPayment(payment, draft: draft, context: context)
+        XCTAssertEqual(payment.note, "Revised")
+        XCTAssertEqual(payment.postponedUntil, date(2026, 2, 3))
+        XCTAssertFalse(payment.isActive)
+        XCTAssertEqual(history.amount, 5)
+        XCTAssertEqual(history.recurringPayment?.persistentModelID, payment.persistentModelID)
+        draft.scheduledDate = date(2026, 2, 1)
+        try FormStore.updateRecurringPayment(payment, draft: draft, context: context)
+        XCTAssertNil(payment.postponedUntil)
+        XCTAssertEqual(payment.scheduledPaymentDate, date(2026, 2, 1))
+    }
+
+    @MainActor
+    func testRecurringConfirmationFailureRollsBackExpenseAndScheduleThenRetryPersistsOnce() throws {
+        let context = try backupContext()
+        let payment = try paymentFormFixture(context)
+        payment.postponedUntil = date(2026, 2, 3); try context.save()
+        XCTAssertThrowsError(try FormStore.confirmRecurringPayment(payment, amount: "4,75", date: date(2026, 2, 3), context: context) { _ in
+            throw CocoaError(.fileWriteOutOfSpace)
+        })
+        XCTAssertEqual(payment.scheduledPaymentDate, date(2026, 1, 31))
+        XCTAssertEqual(payment.postponedUntil, date(2026, 2, 3))
+        XCTAssertEqual(payment.wallet?.currentBalance, 100)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<ExpenseTransaction>()).count, 0)
+        XCTAssertFalse(context.hasChanges)
+        let expense = try FormStore.confirmRecurringPayment(payment, amount: "4,75", date: date(2026, 2, 3), context: context)
+        XCTAssertEqual(expense.amount, Decimal(string: "4.75")!)
+        XCTAssertEqual(expense.recurringScheduledDate, date(2026, 1, 31))
+        XCTAssertEqual(expense.recurringPostponedUntil, date(2026, 2, 3))
+        XCTAssertEqual(payment.scheduledPaymentDate, date(2026, 2, 28))
+        XCTAssertNil(payment.postponedUntil)
+        let persisted = ModelContext(context.container)
+        XCTAssertEqual(try persisted.fetch(FetchDescriptor<ExpenseTransaction>()).count, 1)
+        XCTAssertEqual(try persisted.fetch(FetchDescriptor<RecurringPayment>()).first?.scheduledPaymentDate, date(2026, 2, 28))
+        XCTAssertEqual(payment.wallet?.currentBalance, Decimal(string: "95.25")!)
+    }
+
+    @MainActor
+    func testRecurringControlsRollbackAndSkipKeepOriginalSchedule() throws {
+        let context = try backupContext()
+        let payment = try paymentFormFixture(context)
+        XCTAssertThrowsError(try FormStore.setRecurringPaymentActive(payment, active: false, context: context) { _ in
+            throw CocoaError(.fileWriteOutOfSpace)
+        })
+        XCTAssertTrue(payment.isActive)
+        try FormStore.setRecurringPaymentActive(payment, active: false, context: context)
+        XCTAssertThrowsError(try FormStore.confirmRecurringPayment(payment, amount: "5", date: Date(), context: context))
+        try FormStore.setRecurringPaymentActive(payment, active: true, context: context)
+        XCTAssertThrowsError(try FormStore.postponeRecurringPayment(payment, until: date(2026, 2, 3), context: context) { _ in
+            throw CocoaError(.fileWriteOutOfSpace)
+        })
+        XCTAssertNil(payment.postponedUntil)
+        try FormStore.postponeRecurringPayment(payment, until: date(2026, 2, 3), context: context)
+        XCTAssertThrowsError(try FormStore.skipRecurringPayment(payment, context: context) { _ in
+            throw CocoaError(.fileWriteOutOfSpace)
+        })
+        XCTAssertEqual(payment.scheduledPaymentDate, date(2026, 1, 31))
+        XCTAssertEqual(payment.postponedUntil, date(2026, 2, 3))
+        try FormStore.skipRecurringPayment(payment, context: context)
+        XCTAssertEqual(payment.scheduledPaymentDate, date(2026, 2, 28))
+        XCTAssertNil(payment.postponedUntil)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<ExpenseTransaction>()).count, 0)
+    }
+
+    @MainActor
+    func testRecurringRevertAndDeletionCommitTogetherAndKeepCompletedHistory() throws {
+        let context = try backupContext()
+        let payment = try paymentFormFixture(context)
+        payment.postponedUntil = date(2026, 2, 3); try context.save()
+        let expense = try FormStore.confirmRecurringPayment(payment, amount: "5", date: date(2026, 2, 3), context: context)
+        XCTAssertThrowsError(try FormStore.revertRecurringTransaction(expense, context: context) { _ in
+            throw CocoaError(.fileWriteOutOfSpace)
+        })
+        XCTAssertEqual(payment.scheduledPaymentDate, date(2026, 2, 28))
+        XCTAssertEqual(try context.fetch(FetchDescriptor<ExpenseTransaction>()).count, 1)
+        try FormStore.revertRecurringTransaction(expense, context: context)
+        XCTAssertEqual(payment.scheduledPaymentDate, date(2026, 1, 31))
+        XCTAssertEqual(payment.postponedUntil, date(2026, 2, 3))
+        XCTAssertEqual(payment.wallet?.currentBalance, 100)
+        let replacement = try FormStore.confirmRecurringPayment(payment, amount: "5", date: date(2026, 2, 3), context: context)
+        XCTAssertThrowsError(try FormStore.deleteRecurringPayment(payment, context: context) { _ in
+            throw CocoaError(.fileWriteOutOfSpace)
+        })
+        XCTAssertEqual(try context.fetch(FetchDescriptor<RecurringPayment>()).count, 1)
+        XCTAssertEqual(replacement.recurringPayment?.persistentModelID, payment.persistentModelID)
+        try FormStore.deleteRecurringPayment(payment, context: context)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<RecurringPayment>()).count, 0)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<ExpenseTransaction>()).count, 1)
+        XCTAssertNil(replacement.recurringPayment)
+        XCTAssertThrowsError(try FormStore.deleteTransaction(replacement, context: context) { _ in
+            throw CocoaError(.fileWriteOutOfSpace)
+        })
+        XCTAssertEqual(try context.fetch(FetchDescriptor<ExpenseTransaction>()).count, 1)
+        try FormStore.deleteTransaction(replacement, context: context)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<ExpenseTransaction>()).count, 0)
+    }
+
+    @MainActor
+    private func paymentFormFixture(_ context: ModelContext) throws -> RecurringPayment {
+        let wallet = Wallet(name: "Bank", startingBalance: 100, currencyCode: "EUR", walletType: "Bank Account")
+        let category = SpendingCategory(name: "Bills", icon: "doc.text.fill", colorName: "red")
+        context.insert(wallet); context.insert(category)
+        let payment = RecurringPayment(name: "Bill", amount: 5, frequency: "Monthly", nextPaymentDate: date(2026, 1, 31),
+                                       wallet: wallet, category: category)
+        context.insert(payment); try context.save()
+        return payment
+    }
+
     @MainActor
     private var backupSchema: Schema {
         Schema([Item.self, Wallet.self, ExpenseTransaction.self, SpendingCategory.self,

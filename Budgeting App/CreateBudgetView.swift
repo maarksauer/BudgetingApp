@@ -3,232 +3,80 @@ import SwiftData
 
 struct CreateBudgetView: View {
     @AppStorage(CurrencyPreferences.storageKey) private var storedCurrencyPreferences = CurrencyPreferences.defaultStorageValue
-
-    @Environment(\.dismiss)
-    private var dismiss
-
-    @Environment(\.modelContext)
-    private var modelContext
-
-    @State private var name = ""
-    @State private var amount = ""
-    @State private var currency = CurrencyPreferences.load().defaultCode
-
-    @State private var startDate = Date()
-
-    @State private var endDate =
-        Calendar.current.date(
-            byAdding: .month,
-            value: 1,
-            to: Date()
-        ) ?? Date()
-
-    @State private var isRecurring = false
-    @State private var recurrenceType = "Monthly"
-
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     @Query private var wallets: [Wallet]
-    @Query private var existingBudgets: [Budget]
+    @Query private var budgets: [Budget]
+    @State private var draft = BudgetFormDraft()
+    @FocusState private var focusedField: BudgetFormField?
+    @State private var isSaving = false
+    @State private var showingSaveError = false
+    @State private var saveError = ""
 
     private var currencies: [String] {
-        CurrencyPreferences.decode(storedCurrencyPreferences).budgetCodes(
-            existingCodes: wallets.map(\.currencyCode) + existingBudgets.map(\.currencyCode),
-            selectedCode: currency
-        )
+        let preferences = CurrencyPreferences.decode(storedCurrencyPreferences)
+        return preferences.budgetCodes(existingCodes: wallets.map(\.currencyCode) + budgets.map(\.currencyCode),
+                                       selectedCode: draft.currencyCode)
     }
-
-    let recurrenceTypes = [
-        "Monthly"
-    ]
 
     var body: some View {
-
         NavigationStack {
-
             Form {
-
-                Section("Budget Details") {
-
-                    TextField(
-                        "Budget name",
-                        text: $name
-                    )
-
-                    TextField(
-                        "Total amount",
-                        text: $amount
-                    )
-                    .keyboardType(.decimalPad)
-
-                    if !amount.isEmpty && parsedAmount == nil {
-                        Text("Enter a valid amount.")
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                    }
-
-                    Picker(
-                        "Currency",
-                        selection: $currency
-                    ) {
-                        ForEach(
-                            currencies,
-                            id: \.self
-                        ) {
-                            Text($0).tag($0)
-                        }
-                    }
-                }
-
-                Section("Period") {
-
-                    DatePicker(
-                        "Start Date",
-                        selection: $startDate,
-                        displayedComponents: .date
-                    )
-
-                    DatePicker(
-                        "End Date",
-                        selection: $endDate,
-                        in: startDate...,
-                        displayedComponents: .date
-                    )
-                }
-
-                Section("Repeat") {
-
-                    Toggle(
-                        "Recurring Budget",
-                        isOn: $isRecurring
-                    )
-
-                    if isRecurring {
-
-                        Picker(
-                            "Repeat",
-                            selection: $recurrenceType
-                        ) {
-
-                            ForEach(
-                                recurrenceTypes,
-                                id: \.self
-                            ) {
-                                Text($0)
-                            }
-                        }
-
-                        Text(
-                            "A new budget period will be created automatically when this one ends."
-                        )
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    }
-                }
-
-                Section {
-
-                    Button {
-                        createBudget()
-                    } label: {
-
-                        Text("Create Budget")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .disabled(!canCreateBudget)
-                }
+                BudgetFormFields(draft: $draft, currencyCodes: currencies,
+                                 isPartOfRecurringSeries: false, focusedField: $focusedField)
             }
-
-            .onChange(of: storedCurrencyPreferences) {
-                let preferences = CurrencyPreferences.decode(storedCurrencyPreferences)
-                let available = preferences.budgetCodes(existingCodes: wallets.map(\.currencyCode) + existingBudgets.map(\.currencyCode))
-                if !available.contains(currency) { currency = preferences.defaultCode }
-            }
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("New Budget")
             .navigationBarTitleDisplayMode(.inline)
-
             .toolbar {
-
-                ToolbarItem(
-                    placement: .cancellationAction
-                ) {
-
-                    Button("Cancel") {
-                        dismiss()
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { focusedField = nil; dismiss() }
+                        .disabled(isSaving)
+                        .accessibilityIdentifier("cancelBudgetForm")
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Create", action: save)
+                        .disabled(!draft.canSave || isSaving)
+                        .accessibilityIdentifier("createBudget")
+                }
+                #if os(iOS) || os(visionOS)
+                ToolbarItemGroup(placement: .keyboard) {
+                    if focusedField != nil {
+                        Spacer()
+                        Button("Done") { focusedField = nil }
+                            .accessibilityIdentifier("budgetFormKeyboardDone")
                     }
                 }
+                #endif
+            }
+            .onDisappear { focusedField = nil }
+            .onAppear(perform: ensureAvailableCurrency)
+            .onChange(of: storedCurrencyPreferences) { ensureAvailableCurrency() }
+            .alert("Couldn’t create budget", isPresented: $showingSaveError) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("Your entries are still here. \(saveError)")
             }
         }
     }
 
-    private var cleanedName: String {
-
-        name.trimmingCharacters(
-            in: .whitespacesAndNewlines
-        )
+    private func ensureAvailableCurrency() {
+        let preferences = CurrencyPreferences.decode(storedCurrencyPreferences)
+        let available = preferences.budgetCodes(existingCodes: wallets.map(\.currencyCode) + budgets.map(\.currencyCode))
+        if !available.contains(draft.currencyCode) { draft.currencyCode = preferences.defaultCode }
     }
 
-    private var parsedAmount: Decimal? {
-
-        let cleanedAmount =
-            amount
-                .replacingOccurrences(
-                    of: " ",
-                    with: ""
-                )
-                .replacingOccurrences(
-                    of: ",",
-                    with: "."
-                )
-
-        guard
-            let decimalAmount =
-                Decimal(
-                    string: cleanedAmount
-                ),
-            decimalAmount > 0
-        else {
-            return nil
+    private func save() {
+        guard draft.canSave, !isSaving else { return }
+        focusedField = nil
+        isSaving = true
+        do {
+            try FormStore.createBudget(draft, context: modelContext)
+            dismiss()
+        } catch {
+            isSaving = false
+            saveError = error.localizedDescription
+            showingSaveError = true
         }
-
-        return decimalAmount
-    }
-
-    private var canCreateBudget: Bool {
-
-        !cleanedName.isEmpty &&
-        parsedAmount != nil
-    }
-
-    private func createBudget() {
-
-        guard
-            let decimalAmount =
-                parsedAmount
-        else {
-            return
-        }
-
-        let budget =
-            Budget(
-                name:
-                    cleanedName,
-                totalAmount:
-                    decimalAmount,
-                currencyCode:
-                    currency,
-                startDate:
-                    startDate,
-                endDate:
-                    endDate,
-                isRecurring:
-                    isRecurring,
-                recurrenceType:
-                    recurrenceType
-            )
-
-        modelContext.insert(
-            budget
-        )
-
-        dismiss()
     }
 }

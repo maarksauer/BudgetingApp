@@ -1,80 +1,136 @@
 import SwiftUI
+#if os(iOS) || os(visionOS)
+import UIKit
+#endif
 
-struct MainTabView: View {
-    @State private var selectedTab = 0
-    @State private var showingAddExpense = false
-    @State private var expenseDraft = ExpenseDraft()
+private enum AppTab: Int, CaseIterable {
+    case overview, transactions, add, wallets, more
 
-    var body: some View {
-        TabView(selection: $selectedTab) {
-
-            DashboardView(
-                openTransactions: { selectedTab = 1 },
-                openBudgets: { selectedTab = 2 },
-                openWallets: { selectedTab = 3 }
-            )
-                .modifier(AddExpenseAction(action: openAddExpense))
-                .tabItem {
-                    Label("Home", systemImage: "house.fill")
-                }
-                .tag(0)
-
-            TransactionsView()
-                .modifier(AddExpenseAction(action: openAddExpense))
-                .tabItem {
-                    Label("Transactions", systemImage: "list.bullet")
-                }
-                .tag(1)
-
-            BudgetsView()
-                .modifier(AddExpenseAction(action: openAddExpense))
-                .tabItem {
-                    Label("Budgets", systemImage: "chart.pie")
-                }
-                .tag(2)
-
-            WalletsView()
-                .modifier(AddExpenseAction(action: openAddExpense))
-                .tabItem {
-                    Label("Wallets", systemImage: "wallet.bifold")
-                }
-                .tag(3)
-
-            SettingsView()
-                .modifier(AddExpenseAction(action: openAddExpense))
-                .tabItem {
-                    Label("More", systemImage: "gearshape")
-                }
-                .tag(4)
-        }
-        .sheet(isPresented: $showingAddExpense) {
-            AddExpenseView(draft: $expenseDraft) {
-                showingAddExpense = false
-            }
+    var title: String {
+        switch self {
+        case .overview: "Overview"
+        case .transactions: "Transactions"
+        case .add: "Add"
+        case .wallets: "Wallets"
+        case .more: "More"
         }
     }
 
-    private func openAddExpense() {
-        showingAddExpense = true
+    var symbol: String {
+        switch self {
+        case .overview: "chart.bar.fill"
+        case .transactions: "list.bullet"
+        case .add: "plus"
+        case .wallets: "wallet.bifold"
+        case .more: "gearshape"
+        }
+    }
+
+    var accessibilityID: String {
+        switch self {
+        case .overview: "tabOverview"
+        case .transactions: "tabTransactions"
+        case .add: "tabAdd"
+        case .wallets: "tabWallets"
+        case .more: "tabMore"
+        }
     }
 }
 
-private struct AddExpenseAction: ViewModifier {
-    let action: () -> Void
+struct MainTabView: View {
+    @State private var selectedTab: AppTab = .add
+    @State private var expenseDraft = ExpenseDraft()
+    @State private var morePath: [MoreRoute] = []
+    @State private var keyboardIsVisible = false
 
-    func body(content: Content) -> some View {
-        content.safeAreaInset(edge: .bottom, spacing: 0) {
-            Button(action: action) {
-                Label("Add Transaction", systemImage: "plus.circle.fill")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 4)
-            }
-            .buttonStyle(.borderedProminent)
-            .accessibilityIdentifier("openAddExpense")
-            .padding(.horizontal, 20)
-            .padding(.vertical, 8)
-            .background(.bar)
+    var body: some View {
+        TabView(selection: $selectedTab) {
+            DashboardView(
+                openTransactions: { selectedTab = .transactions },
+                openBudgets: {
+                    morePath = [.budgets]
+                    selectedTab = .more
+                },
+                openWallets: { selectedTab = .wallets }
+            )
+            .toolbarVisibility(.hidden, for: .tabBar)
+            .tabItem { Label("Overview", systemImage: "chart.bar.fill") }
+            .tag(AppTab.overview)
+
+            TransactionsView()
+                .toolbarVisibility(.hidden, for: .tabBar)
+                .tabItem { Label("Transactions", systemImage: "list.bullet") }
+                .tag(AppTab.transactions)
+
+            AddExpenseView(draft: $expenseDraft)
+                .toolbarVisibility(.hidden, for: .tabBar)
+                .tabItem { Label("Add", systemImage: "plus") }
+                .tag(AppTab.add)
+
+            WalletsView()
+                .toolbarVisibility(.hidden, for: .tabBar)
+                .tabItem { Label("Wallets", systemImage: "wallet.bifold") }
+                .tag(AppTab.wallets)
+
+            SettingsView(path: $morePath)
+                .toolbarVisibility(.hidden, for: .tabBar)
+                .tabItem { Label("More", systemImage: "gearshape") }
+                .tag(AppTab.more)
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if !keyboardIsVisible {
+                dock
+            }
+        }
+        #if os(iOS) || os(visionOS)
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            keyboardIsVisible = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            keyboardIsVisible = false
+        }
+        #endif
+    }
+
+    private var dock: some View {
+        HStack(alignment: .bottom, spacing: 0) {
+            ForEach(AppTab.allCases, id: \.self) { tab in
+                Button {
+                    selectedTab = tab
+                } label: {
+                    VStack(spacing: 4) {
+                        if tab == .add {
+                            Image(systemName: tab.symbol)
+                                .font(.system(size: 24, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: 48, height: 48)
+                                .background(Color.accentColor, in: Circle())
+                                .overlay {
+                                    Circle()
+                                        .strokeBorder(.primary.opacity(selectedTab == .add ? 0.3 : 0), lineWidth: 2)
+                                }
+                        } else {
+                            Image(systemName: tab.symbol)
+                                .font(.system(size: 21, weight: .medium))
+                                .frame(height: 32)
+                        }
+                        Text(tab.title)
+                            .font(.caption2)
+                    }
+                    .foregroundStyle(selectedTab == tab ? Color.accentColor : Color.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 56, alignment: .bottom)
+                    .padding(.vertical, 8)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(tab == .add ? "Add Transaction" : tab.title)
+                .accessibilityIdentifier(tab.accessibilityID)
+                .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
+            }
+        }
+        .padding(.horizontal, 6)
+        .background(.bar)
+        .overlay(alignment: .top) { Divider() }
+        .accessibilityIdentifier("mainDock")
     }
 }

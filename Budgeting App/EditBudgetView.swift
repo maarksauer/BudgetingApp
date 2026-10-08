@@ -3,346 +3,96 @@ import SwiftData
 
 struct EditBudgetView: View {
     @AppStorage(CurrencyPreferences.storageKey) private var storedCurrencyPreferences = CurrencyPreferences.defaultStorageValue
-
-    @Environment(\.dismiss)
-    private var dismiss
-
-    @Query
-    private var allBudgets: [Budget]
-
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @Query private var wallets: [Wallet]
+    @Query private var budgets: [Budget]
     let budget: Budget
-
-    @State private var name: String
-    @State private var amount: String
-    @State private var currency: String
-    @State private var startDate: Date
-    @State private var endDate: Date
-
-    @State private var isRecurring: Bool
-    @State private var recurrenceType: String
-
+    @State private var draft: BudgetFormDraft
+    @FocusState private var focusedField: BudgetFormField?
+    @State private var isSaving = false
+    @State private var showingSaveError = false
+    @State private var saveError = ""
     @State private var showingSaveOptions = false
 
-    @Query private var wallets: [Wallet]
+    init(budget: Budget) {
+        self.budget = budget
+        _draft = State(initialValue: BudgetFormDraft(budget: budget))
+    }
 
     private var currencies: [String] {
-        CurrencyPreferences.decode(storedCurrencyPreferences).budgetCodes(
-            existingCodes: wallets.map(\.currencyCode) + allBudgets.map(\.currencyCode),
-            selectedCode: currency
-        )
-    }
-
-    let recurrenceTypes = [
-        "Monthly"
-    ]
-
-    init(
-        budget: Budget
-    ) {
-        self.budget = budget
-
-        _name = State(
-            initialValue: budget.name
-        )
-
-        _amount = State(
-            initialValue:
-                NSDecimalNumber(
-                    decimal: budget.totalAmount
-                ).stringValue
-        )
-
-        _currency = State(
-            initialValue: budget.currencyCode
-        )
-
-        _startDate = State(
-            initialValue: budget.startDate
-        )
-
-        _endDate = State(
-            initialValue: budget.endDate
-        )
-
-        _isRecurring = State(
-            initialValue: budget.isRecurring
-        )
-
-        _recurrenceType = State(
-            initialValue: budget.recurrenceType
-        )
-    }
-
-    var body: some View {
-
-        NavigationStack {
-
-            Form {
-
-                Section("Budget Details") {
-
-                    TextField(
-                        "Budget name",
-                        text: $name
-                    )
-
-                    TextField(
-                        "Total amount",
-                        text: $amount
-                    )
-                    .keyboardType(.decimalPad)
-
-                    Picker(
-                        "Currency",
-                        selection: $currency
-                    ) {
-                        ForEach(
-                            currencies,
-                            id: \.self
-                        ) {
-                            Text($0).tag($0)
-                        }
-                    }
-                }
-
-                Section("Period") {
-
-                    DatePicker(
-                        "Start Date",
-                        selection: $startDate,
-                        displayedComponents: .date
-                    )
-
-                    DatePicker(
-                        "End Date",
-                        selection: $endDate,
-                        in: startDate...,
-                        displayedComponents: .date
-                    )
-
-                    if isPartOfRecurringSeries {
-                        Text(
-                            "Period dates only apply to this individual budget."
-                        )
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    }
-                }
-
-                Section("Repeat") {
-
-                    Toggle(
-                        "Recurring Budget",
-                        isOn: $isRecurring
-                    )
-
-                    if isRecurring {
-
-                        Picker(
-                            "Repeat",
-                            selection: $recurrenceType
-                        ) {
-                            ForEach(
-                                recurrenceTypes,
-                                id: \.self
-                            ) {
-                                Text($0)
-                            }
-                        }
-                    }
-                }
-            }
-
-            .navigationTitle("Edit Budget")
-            .navigationBarTitleDisplayMode(.inline)
-
-            .toolbar {
-
-                ToolbarItem(
-                    placement: .cancellationAction
-                ) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                }
-
-                ToolbarItem(
-                    placement: .confirmationAction
-                ) {
-                    Button("Save") {
-
-                        if isPartOfRecurringSeries {
-                            showingSaveOptions = true
-                        } else {
-                            saveThisBudgetOnly()
-                        }
-                    }
-                    .disabled(
-                        name
-                            .trimmingCharacters(
-                                in: .whitespacesAndNewlines
-                            )
-                            .isEmpty
-                        ||
-                        amount.isEmpty
-                    )
-                }
-            }
-
-            .confirmationDialog(
-                "Apply Changes",
-                isPresented: $showingSaveOptions,
-                titleVisibility: .visible
-            ) {
-
-                Button("This Budget Only") {
-                    saveThisBudgetOnly()
-                }
-
-                Button("This & Future Budgets") {
-                    saveThisAndFutureBudgets()
-                }
-
-                Button(
-                    "Cancel",
-                    role: .cancel
-                ) { }
-
-            } message: {
-
-                Text(
-                    "Choose whether these changes should affect only this period or this period and future periods in the recurring series."
-                )
-            }
-        }
+        let preferences = CurrencyPreferences.decode(storedCurrencyPreferences)
+        return preferences.budgetCodes(existingCodes: wallets.map(\.currencyCode) + budgets.map(\.currencyCode),
+                                       selectedCode: draft.currencyCode)
     }
 
     private var isPartOfRecurringSeries: Bool {
-
-        allBudgets.contains {
-            otherBudget in
-
-            otherBudget.seriesID ==
-                budget.seriesID
-            &&
-            otherBudget.persistentModelID !=
-                budget.persistentModelID
+        budget.isRecurring || budgets.contains {
+            $0.seriesID == budget.seriesID && $0.persistentModelID != budget.persistentModelID
         }
-        ||
-        budget.isRecurring
     }
 
-    private func parsedAmount() -> Decimal? {
-
-        let cleanedAmount =
-            amount
-                .replacingOccurrences(
-                    of: " ",
-                    with: ""
-                )
-                .replacingOccurrences(
-                    of: ",",
-                    with: "."
-                )
-
-        guard
-            let decimalAmount =
-                Decimal(
-                    string: cleanedAmount
-                ),
-            decimalAmount > 0
-        else {
-            return nil
-        }
-
-        return decimalAmount
-    }
-
-    private func saveThisBudgetOnly() {
-
-        guard
-            let decimalAmount =
-                parsedAmount()
-        else {
-            return
-        }
-
-        budget.name =
-            name.trimmingCharacters(
-                in: .whitespacesAndNewlines
-            )
-
-        budget.totalAmount =
-            decimalAmount
-
-        budget.currencyCode =
-            currency
-
-        budget.startDate =
-            startDate
-
-        budget.endDate =
-            endDate
-
-        budget.isRecurring =
-            isRecurring
-
-        budget.recurrenceType =
-            recurrenceType
-
-        dismiss()
-    }
-
-    private func saveThisAndFutureBudgets() {
-
-        guard
-            let decimalAmount =
-                parsedAmount()
-        else {
-            return
-        }
-
-        let cleanedName =
-            name.trimmingCharacters(
-                in: .whitespacesAndNewlines
-            )
-
-        let futureBudgets =
-            allBudgets.filter {
-                otherBudget in
-
-                otherBudget.seriesID ==
-                    budget.seriesID
-                &&
-                otherBudget.startDate >=
-                    budget.startDate
+    var body: some View {
+        NavigationStack {
+            Form {
+                BudgetFormFields(draft: $draft, currencyCodes: currencies,
+                                 isPartOfRecurringSeries: isPartOfRecurringSeries, focusedField: $focusedField)
             }
-
-        for item in futureBudgets {
-
-            item.name =
-                cleanedName
-
-            item.totalAmount =
-                decimalAmount
-
-            item.currencyCode =
-                currency
-
-            item.isRecurring =
-                isRecurring
-
-            item.recurrenceType =
-                recurrenceType
+            .scrollDismissesKeyboard(.interactively)
+            .navigationTitle("Edit Budget")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { focusedField = nil; dismiss() }
+                        .disabled(isSaving)
+                        .accessibilityIdentifier("cancelBudgetForm")
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        focusedField = nil
+                        if isPartOfRecurringSeries { showingSaveOptions = true }
+                        else { save(includeFuture: false) }
+                    }
+                        .disabled(!draft.canSave || isSaving)
+                        .accessibilityIdentifier("saveBudget")
+                }
+                #if os(iOS) || os(visionOS)
+                ToolbarItemGroup(placement: .keyboard) {
+                    if focusedField != nil {
+                        Spacer()
+                        Button("Done") { focusedField = nil }
+                            .accessibilityIdentifier("budgetFormKeyboardDone")
+                    }
+                }
+                #endif
+            }
+            .onDisappear { focusedField = nil }
+            .confirmationDialog("Apply Changes", isPresented: $showingSaveOptions, titleVisibility: .visible) {
+                Button("This Budget Only") { save(includeFuture: false) }
+                Button("This & Future Budgets") { save(includeFuture: true) }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("Choose whether to update this period or this and future periods in the recurring series. Period dates apply only to this budget.")
+            }
+            .alert("Couldn’t save budget", isPresented: $showingSaveError) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("Your entries are still here. \(saveError)")
+            }
         }
+    }
 
-        // Dates belong only to the period currently being edited.
-        budget.startDate =
-            startDate
-
-        budget.endDate =
-            endDate
-
-        dismiss()
+    private func save(includeFuture: Bool) {
+        guard draft.canSave, !isSaving else { return }
+        focusedField = nil
+        isSaving = true
+        do {
+            try FormStore.updateBudget(budget, draft: draft, includeFuture: includeFuture, context: modelContext)
+            dismiss()
+        } catch {
+            isSaving = false
+            saveError = error.localizedDescription
+            showingSaveError = true
+        }
     }
 }
