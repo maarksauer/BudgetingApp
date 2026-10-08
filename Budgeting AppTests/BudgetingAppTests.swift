@@ -1292,6 +1292,101 @@ final class BudgetingAppTests: XCTestCase {
         try context.save()
     }
 
+    @MainActor
+    func testActivityFiltersCombineTypeWalletAndCategoryWithoutChangingBalances() {
+        let wallet = Wallet(name: "Cash", startingBalance: 100, currencyCode: "EUR", walletType: "Cash")
+        let other = Wallet(name: "Bank", startingBalance: 20, currencyCode: "HUF", walletType: "Bank")
+        let category = SpendingCategory(name: "Food", icon: "fork.knife", colorName: "orange")
+        let sameName = SpendingCategory(name: "Food", icon: "basket", colorName: "green")
+        let expense = ExpenseTransaction(amount: 12, wallet: wallet, category: category)
+        let income = ExpenseTransaction(amount: 30, isIncome: true, wallet: wallet, category: category)
+        let otherExpense = ExpenseTransaction(amount: 4, wallet: other, category: sameName)
+        let transfer = WalletTransfer(sourceAmount: 5, destinationAmount: 2000, sourceWallet: wallet, destinationWallet: other)
+        wallet.transactions = [expense, income]
+        let rows: [TransactionActivity] = [.expense(expense), .expense(income), .expense(otherExpense), .transfer(transfer)]
+        let originalBalance = wallet.balance(including: [transfer])
+        var filters = TransactionFilters()
+        filters.walletID = wallet.persistentModelID
+        filters.categoryID = category.persistentModelID
+        XCTAssertEqual(Set(TransactionActivityList.filtered(rows, search: "", filters: filters).map(\.id)),
+                       Set([TransactionActivity.expense(expense).id, TransactionActivity.expense(income).id]))
+        filters.kind = .expenses
+        XCTAssertEqual(TransactionActivityList.filtered(rows, search: "", filters: filters).map(\.id), [TransactionActivity.expense(expense).id])
+        filters.categoryID = sameName.persistentModelID
+        XCTAssertTrue(TransactionActivityList.filtered(rows, search: "", filters: filters).isEmpty)
+        filters.categoryID = nil
+        filters.kind = .transfers
+        XCTAssertEqual(TransactionActivityList.filtered(rows, search: "", filters: filters).map(\.id), [TransactionActivity.transfer(transfer).id])
+        filters.walletID = other.persistentModelID
+        XCTAssertEqual(TransactionActivityList.filtered(rows, search: "", filters: filters).count, 1)
+        XCTAssertEqual(wallet.balance(including: [transfer]), originalBalance)
+    }
+
+    @MainActor
+    func testActivitySearchMatchesAccentsMultipleFieldsAndBothTransferAmounts() {
+        let wallet = Wallet(name: "Készpénz", startingBalance: 100, currencyCode: "EUR", walletType: "Cash")
+        let other = Wallet(name: "Bank", startingBalance: 0, currencyCode: "HUF", walletType: "Bank")
+        let category = SpendingCategory(name: "Élelmiszer", icon: "basket", colorName: "green")
+        let expense = ExpenseTransaction(amount: Decimal(string: "12.25")!, note: "Kávé", wallet: wallet, category: category)
+        let transfer = WalletTransfer(sourceAmount: Decimal(string: "4.50")!, destinationAmount: 1800, note: "Átvezetés", sourceWallet: wallet, destinationWallet: other)
+        let rows: [TransactionActivity] = [.expense(expense), .transfer(transfer)]
+        XCTAssertEqual(TransactionActivityList.filtered(rows, search: "  KAVE keszpenz elelmiszer 12,25  ", filters: TransactionFilters()).map(\.id), [TransactionActivity.expense(expense).id])
+        XCTAssertEqual(TransactionActivityList.filtered(rows, search: "ATVEZETES bank HUF 1800 4,50", filters: TransactionFilters()).map(\.id), [TransactionActivity.transfer(transfer).id])
+        XCTAssertTrue(TransactionActivityList.filtered(rows, search: "kave nonexistent", filters: TransactionFilters()).isEmpty)
+        XCTAssertEqual(TransactionActivityList.filtered(rows, search: " \n ", filters: TransactionFilters()).count, 2)
+    }
+
+    @MainActor
+    func testActivityCustomDateFilterIncludesFinalDayAndHandlesDST() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Budapest")!
+        let start = calendar.date(from: DateComponents(year: 2026, month: 10, day: 25))!
+        let next = calendar.date(byAdding: .day, value: 1, to: start)!
+        XCTAssertEqual(next.timeIntervalSince(start), 25 * 60 * 60)
+        var filters = TransactionFilters()
+        filters.period = .custom
+        filters.startDate = start
+        filters.endDate = start
+        let first = ExpenseTransaction(amount: 1, date: start)
+        let last = ExpenseTransaction(amount: 2, date: next.addingTimeInterval(-1))
+        let outside = ExpenseTransaction(amount: 3, date: next)
+        let rows: [TransactionActivity] = [.expense(first), .expense(last), .expense(outside)]
+        XCTAssertEqual(TransactionActivityList.filtered(rows, search: "", filters: filters, calendar: calendar).map(\.id),
+                       [TransactionActivity.expense(last).id, TransactionActivity.expense(first).id])
+        filters.startDate = next
+        filters.endDate = start
+        XCTAssertEqual(TransactionActivityList.filtered(rows, search: "", filters: filters, calendar: calendar).count, 3)
+    }
+
+    @MainActor
+    func testActivityDatePresetsRespectCalendarBoundaries() {
+        let now = date(2026, 10, 8, hour: 12)
+        var filters = TransactionFilters()
+        filters.period = .lastSevenDays
+        XCTAssertEqual(filters.dateRange(now: now, calendar: utcCalendar), date(2026, 10, 2)..<date(2026, 10, 9))
+        filters.period = .thisMonth
+        XCTAssertEqual(filters.dateRange(now: now, calendar: utcCalendar), date(2026, 10, 1)..<date(2026, 11, 1))
+        filters.period = .lastMonth
+        XCTAssertEqual(filters.dateRange(now: now, calendar: utcCalendar), date(2026, 9, 1)..<date(2026, 10, 1))
+        filters.period = .anyTime
+        XCTAssertNil(filters.dateRange(now: now, calendar: utcCalendar))
+    }
+
+    @MainActor
+    func testActivityGroupingAndStableOrderRetainMissingWalletHistory() {
+        let expense = ExpenseTransaction(amount: 5, date: date(2026, 10, 8, hour: 12), note: "Old payment")
+        let transfer = WalletTransfer(sourceAmount: 2, destinationAmount: 800, date: expense.date, note: "Historical transfer",
+                                      sourceWallet: nil, destinationWallet: nil, sourceCurrencyCode: "EUR", destinationCurrencyCode: "HUF", createdAt: expense.date)
+        let older = ExpenseTransaction(amount: 3, date: date(2026, 10, 7, hour: 23))
+        let rows: [TransactionActivity] = [.expense(expense), .transfer(transfer), .expense(older)]
+        let sorted = TransactionActivityList.filtered(rows, search: "", filters: TransactionFilters())
+        XCTAssertEqual(sorted.map(\.id), TransactionActivityList.filtered(Array(rows.reversed()), search: "", filters: TransactionFilters()).map(\.id))
+        let groups = TransactionActivityList.grouped(sorted, calendar: utcCalendar)
+        XCTAssertEqual(groups.map(\.date), [date(2026, 10, 8), date(2026, 10, 7)])
+        XCTAssertEqual(groups.map { $0.activities.count }, [2, 1])
+        XCTAssertEqual(TransactionActivityList.filtered(rows, search: "HUF 800", filters: TransactionFilters()).map(\.id), [TransactionActivity.transfer(transfer).id])
+    }
+
     private var utcCalendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!

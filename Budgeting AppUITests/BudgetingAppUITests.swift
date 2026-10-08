@@ -507,6 +507,62 @@ final class BudgetingAppUITests: XCTestCase {
     }
 
     @MainActor
+    func testTransactionListTypeFiltersApplyCancelChipsAndNoResults() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launch()
+        let wallet = createFormTestWallet(in: app)
+        openAddExpense(in: app)
+        app.segmentedControls["transactionType"].buttons["Income"].tap()
+        chooseFormWallet(wallet, prefix: "expense", in: app)
+        let amount = app.textFields["expenseAmount"]
+        scrollToFormElement(amount, in: app, upward: false)
+        amount.tap(); amount.typeText("25")
+        dismissExpenseKeyboard(in: app)
+        let noteValue = "Kávé UI \(UUID().uuidString.prefix(8))"
+        let note = app.textFields["expenseNote"]
+        scrollToFormElement(note, in: app)
+        note.tap(); note.typeText(noteValue)
+        dismissExpenseKeyboard(in: app)
+        app.buttons["saveTransaction"].tap()
+        XCTAssertTrue(app.alerts["Transaction Added"].waitForExistence(timeout: 5))
+        app.alerts["Transaction Added"].buttons["OK"].tap()
+        app.buttons["tabTransactions"].tap()
+        let search = app.searchFields.firstMatch
+        scrollToFormElement(search, in: app, upward: false)
+        search.tap(); search.typeText(noteValue.replacingOccurrences(of: "Kávé", with: "kave") + "\n")
+        assertKeyboardHidden(in: app)
+        let row = app.buttons["transactionRow-\(noteValue)"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        app.buttons["transactionType-Expenses"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["transactionNoResults"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(row.exists)
+        app.buttons["transactionType-Income"].tap()
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+
+        app.buttons["openTransactionFilters"].tap()
+        let walletPicker = app.buttons["transactionFilterWallet"]
+        walletPicker.tap()
+        app.buttons.matching(NSPredicate(format: "label CONTAINS %@", wallet)).firstMatch.tap()
+        app.buttons["cancelTransactionFilters"].tap()
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["removeWalletFilter"].exists)
+
+        app.buttons["openTransactionFilters"].tap()
+        walletPicker.tap()
+        app.buttons.matching(NSPredicate(format: "label CONTAINS %@", wallet)).firstMatch.tap()
+        app.buttons["applyTransactionFilters"].tap()
+        XCTAssertTrue(app.buttons["removeWalletFilter"].waitForExistence(timeout: 5))
+        XCTAssertTrue(row.exists)
+        app.buttons["removeWalletFilter"].tap()
+        XCTAssertFalse(app.buttons["removeWalletFilter"].exists)
+        app.buttons["resetTransactionFilters"].tap()
+        XCTAssertTrue(row.exists)
+        row.tap()
+        XCTAssertTrue(app.navigationBars["Transaction"].waitForExistence(timeout: 5))
+    }
+
+    @MainActor
     private func openFormTestWallet(_ name: String, in app: XCUIApplication) {
         app.buttons["tabWallets"].tap()
         let wallet = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", name)).firstMatch
