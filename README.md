@@ -64,7 +64,7 @@ On **Add Transaction**, choose **Expense** or **Income** at the top. Income need
 
 ## Refined transactions and recurring payments
 
-Add Transaction and transaction editing share a large amount field, wallet menus with icons, and directly selectable category tiles. Subcategories remain optional. Expense/Income choices have direction icons, income keeps its source/note field, and the primary Add/Save action is highlighted in the navigation bar. A fresh installation can create its first wallet directly from Add Transaction. Transaction and recurring-payment rows show readable category icons, separate amounts/currencies, wallet details, and clear dates/status. At accessibility text sizes, amounts move below the description.
+Add Transaction and transaction editing share a large amount field, wallet menus with icons, and category dropdowns with icons. Subcategories remain optional. Expense/Income choices have direction icons, income keeps its source/note field, and the primary Add/Save action is highlighted in the navigation bar. A fresh installation can create its first wallet directly from Add Transaction. Transaction and recurring-payment rows show readable category icons, separate amounts/currencies, wallet details, and clear dates/status. At accessibility text sizes, amounts move below the description. The dock occupies its own layout space below the tab pages, so final form/list rows can scroll fully above it; the dock hides while the keyboard is open.
 
 New/Edit Recurring Payment uses the same amount, wallet, category, and note controls, with a payment name and repeat schedule. Name-field Next focuses the amount; note-field Done/Return dismisses the keyboard. Every transaction and recurring payment amount keyboard has **Done**, and dragging the form dismisses it. Dismissal preserves entries and never saves. Cancel in an editor discards changes, and starting Edit again reloads the saved values. Positive amounts use the same strict decimal parser as wallet/budget forms; partial numbers such as `12abc`, zero, negatives, and ambiguous separators cannot be saved.
 
@@ -74,13 +74,13 @@ Creating or editing a recurring payment does not spend money or require the futu
 
 ### Check transactions and recurring payments
 
-1. With a funded wallet, add an expense and income. Check the larger amount field, category tiles, subcategories, and Add action in Light/Dark appearance and with large text. Switch tabs with a draft and return; fields should remain.
+1. With a funded wallet, add an expense and income. Check the larger amount field, category dropdowns, subcategories, and Add action in Light/Dark appearance and with large text. Switch tabs with a draft and return; fields should remain.
 2. Try `1 000,50`, `1000.50`, `0`, `-5`, and `12abc`. Valid positive amounts should save exactly; invalid amounts should disable Add/Save/Confirm and show a message. Check a wallet with transfers and a credit/overdraft limit.
 3. Edit a transaction's amount, note, date, wallet, and category. Use Done/Return and drag dismissal without saving. Cancel, reopen Edit, and verify its prior values. Save, restart, and verify balances and records persist.
 4. Create a recurring payment with a positive amount, name, wallet, category, and schedule. Check Next/Done/Return. Cancel an edit, then save a separate edit. With insufficient current funds, creating the schedule should still work while confirming payment remains disabled.
 5. Confirm a due/postponed bill with a different actual amount. Check one expense appears, the balance updates, and the next date follows the original schedule. Cancel confirmation and verify no expense or date change. Confirm again from the details page.
 6. Postpone using quick choices and Choose Date, skip, pause/resume, revert a completed payment, and delete a recurring payment. Verify the intended date/status/balance/history after each action and after restarting. Completed history should remain when the schedule is deleted.
-7. Run the injected-failure unit tests in Xcode. They check rollback/retry, exact amounts, prior pending changes, transaction wallet moves, retained postponements/history, confirmation and reversion as a single save, and failed deletions/controls. The two additional UI tests exercise creation/editing/confirmation, keyboard controls, validation, cancellation, and saved form values.
+7. Run the injected-failure unit tests in Xcode. They check rollback/retry, exact amounts, prior pending changes, transaction wallet moves, retained postponements/history, confirmation and reversion as a single save, and failed deletions/controls. The two additional UI tests exercise creation/editing/confirmation, keyboard controls, validation, cancellation, saved form values, and the last balance row remaining above the dock.
 
 ## Refined wallet and budget forms
 

@@ -44,40 +44,45 @@ struct MainTabView: View {
     @State private var keyboardIsVisible = false
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            DashboardView(
-                openTransactions: { selectedTab = .transactions },
-                openBudgets: {
-                    morePath = [.budgets]
-                    selectedTab = .more
-                },
-                openWallets: { selectedTab = .wallets }
-            )
-            .toolbarVisibility(.hidden, for: .tabBar)
-            .tabItem { Label("Overview", systemImage: "chart.bar.fill") }
-            .tag(AppTab.overview)
-
-            TransactionsView()
+        VStack(spacing: 0) {
+            TabView(selection: $selectedTab) {
+                DashboardView(
+                    openTransactions: { selectedTab = .transactions },
+                    openBudgets: {
+                        morePath = [.budgets]
+                        selectedTab = .more
+                    },
+                    openWallets: { selectedTab = .wallets }
+                )
                 .toolbarVisibility(.hidden, for: .tabBar)
-                .tabItem { Label("Transactions", systemImage: "list.bullet") }
-                .tag(AppTab.transactions)
+                .tabItem { Label("Overview", systemImage: "chart.bar.fill") }
+                .tag(AppTab.overview)
 
-            AddExpenseView(draft: $expenseDraft)
-                .toolbarVisibility(.hidden, for: .tabBar)
-                .tabItem { Label("Add", systemImage: "plus") }
-                .tag(AppTab.add)
+                TransactionsView()
+                    .toolbarVisibility(.hidden, for: .tabBar)
+                    .tabItem { Label("Transactions", systemImage: "list.bullet") }
+                    .tag(AppTab.transactions)
 
-            WalletsView()
-                .toolbarVisibility(.hidden, for: .tabBar)
-                .tabItem { Label("Wallets", systemImage: "wallet.bifold") }
-                .tag(AppTab.wallets)
+                AddExpenseView(draft: $expenseDraft)
+                    .toolbarVisibility(.hidden, for: .tabBar)
+                    .tabItem { Label("Add", systemImage: "plus") }
+                    .tag(AppTab.add)
 
-            SettingsView(path: $morePath)
-                .toolbarVisibility(.hidden, for: .tabBar)
-                .tabItem { Label("More", systemImage: "gearshape") }
-                .tag(AppTab.more)
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+                WalletsView()
+                    .toolbarVisibility(.hidden, for: .tabBar)
+                    .tabItem { Label("Wallets", systemImage: "wallet.bifold") }
+                    .tag(AppTab.wallets)
+
+                SettingsView(path: $morePath)
+                    .toolbarVisibility(.hidden, for: .tabBar)
+                    .tabItem { Label("More", systemImage: "gearshape") }
+                    .tag(AppTab.more)
+            }
+            // Reserve actual layout space instead of relying on a safe-area
+            // inset passing through TabView's hosted navigation stacks.
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+
             if !keyboardIsVisible {
                 dock
             }

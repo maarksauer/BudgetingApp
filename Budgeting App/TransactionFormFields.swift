@@ -141,30 +141,17 @@ struct TransactionSelectionSections: View {
                     Text("No categories available. Add one in More → Categories.")
                         .foregroundStyle(.secondary)
                 } else {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: 10)], spacing: 10) {
+                    Picker(selection: $draft.selectedCategory) {
+                        Text("Select Category").tag(nil as SpendingCategory?)
                         ForEach(categories) { category in
-                            let selected = draft.selectedCategory?.persistentModelID == category.persistentModelID
-                            Button {
-                                draft.selectedCategory = category
-                            } label: {
-                                HStack(spacing: 8) {
-                                    Image(systemName: category.icon)
-                                        .foregroundStyle(FormPalette.color(category.colorName))
-                                    Text(category.name).font(.subheadline.weight(.medium))
-                                    Spacer(minLength: 0)
-                                    if selected { Image(systemName: "checkmark").font(.caption.weight(.bold)) }
-                                }
-                                .padding(12).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                                .background(selected ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.06),
-                                            in: RoundedRectangle(cornerRadius: 12))
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(category.name)
-                            .accessibilityAddTraits(selected ? .isSelected : [])
-                            .accessibilityIdentifier("\(prefix)Category-\(category.name)")
+                            Label(category.name, systemImage: category.icon)
+                                .tag(category as SpendingCategory?)
                         }
+                    } label: {
+                        Label("Category", systemImage: "square.grid.2x2")
                     }
-                    .padding(.vertical, 4)
+                    .pickerStyle(.menu)
+                    .accessibilityIdentifier("\(prefix)Category")
                     if let category = draft.selectedCategory, !category.subcategories.isEmpty {
                         Picker("Subcategory", selection: $draft.selectedSubcategoryID) {
                             Text("None").tag(nil as PersistentIdentifier?)
@@ -214,6 +201,8 @@ struct TransactionFormFields: View {
                     let available = draft.availableAmount(transfers: transfers, excluding: editingTransaction)
                     LabeledContent(wallet.walletType == "Credit Card" ? "Available Credit" : "Available to Spend",
                                    value: available.formatted(.currency(code: wallet.currencyCode)))
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("\(prefix)AvailableAmount")
                     if let total = draft.total, total > available {
                         FormValidationMessage(text: "This expense exceeds the available amount of \(available.formatted(.currency(code: wallet.currencyCode))).")
                     }

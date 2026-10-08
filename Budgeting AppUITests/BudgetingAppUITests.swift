@@ -276,7 +276,20 @@ final class BudgetingAppUITests: XCTestCase {
         let walletName = createFormTestWallet(in: app)
         app.buttons["tabAdd"].tap()
         chooseFormWallet(walletName, prefix: "expense", in: app)
+        XCTAssertTrue(app.buttons["expenseCategory"].exists)
+        let available = app.descendants(matching: .any)["expenseAvailableAmount"].firstMatch
+        for _ in 0..<10 {
+            app.swipeUp()
+            if available.exists && available.isHittable { break }
+        }
+        XCTAssertTrue(available.exists && available.isHittable)
+        // The final balance row must fit above the dock, including its larger + button.
+        XCTAssertLessThanOrEqual(available.frame.maxY, app.buttons["tabAdd"].frame.minY)
         let amount = app.textFields["expenseAmount"]
+        for _ in 0..<10 {
+            if amount.exists && amount.isHittable { break }
+            app.swipeDown()
+        }
         amount.tap(); amount.typeText("12.25")
         dismissExpenseKeyboard(in: app)
         let noteValue = "UI expense \(UUID().uuidString.prefix(8))"
