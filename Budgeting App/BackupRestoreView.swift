@@ -182,25 +182,25 @@ private struct BackupPreviewView: View {
         NavigationStack {
             Form {
                 Section("Backup File") {
-                    LabeledContent("File", value: preview.name)
-                    LabeledContent("Created", value: snapshot.createdAt.formatted(date: .abbreviated, time: .shortened))
-                    LabeledContent("Appearance", value: AppAppearance(rawValue: snapshot.appearance)?.title ?? "System")
+                    ReadableDetailRow(title: "File", value: preview.name)
+                    ReadableDetailRow(title: "Created", value: snapshot.createdAt.formatted(date: .abbreviated, time: .shortened))
+                    ReadableDetailRow(title: "Appearance", value: AppAppearance(rawValue: snapshot.appearance)?.title ?? "System")
                     if let preferences = snapshot.currencyPreferences {
-                        LabeledContent("Added Currencies", value: preferences.listedCodes.joined(separator: ", "))
-                        LabeledContent("Enabled Currencies", value: preferences.enabledCodes.joined(separator: ", "))
-                        LabeledContent("Default Currency", value: preferences.defaultCode)
+                        ReadableDetailRow(title: "Added Currencies", value: preferences.listedCodes.joined(separator: ", "))
+                        ReadableDetailRow(title: "Enabled Currencies", value: preferences.enabledCodes.joined(separator: ", "))
+                        ReadableDetailRow(title: "Default Currency", value: preferences.defaultCode)
                     } else {
-                        LabeledContent("Currency Settings", value: "Not included; current settings kept")
+                        ReadableDetailRow(title: "Currency Settings", value: "Not included; current settings kept")
                     }
                 }
                 Section("Contents") {
-                    LabeledContent("Wallets", value: "\(snapshot.wallets.count)")
-                    LabeledContent("Transactions", value: "\(snapshot.transactions.count)")
-                    LabeledContent("Transfers", value: "\(snapshot.transfers.count)")
-                    LabeledContent("Categories", value: "\(snapshot.categories.count)")
-                    LabeledContent("Subcategories", value: "\(snapshot.subcategories.count)")
-                    LabeledContent("Budgets", value: "\(snapshot.budgets.count)")
-                    LabeledContent("Recurring Payments", value: "\(snapshot.recurringPayments.count)")
+                    ReadableDetailRow(title: "Wallets", value: "\(snapshot.wallets.count)")
+                    ReadableDetailRow(title: "Transactions", value: "\(snapshot.transactions.count)")
+                    ReadableDetailRow(title: "Transfers", value: "\(snapshot.transfers.count)")
+                    ReadableDetailRow(title: "Categories", value: "\(snapshot.categories.count)")
+                    ReadableDetailRow(title: "Subcategories", value: "\(snapshot.subcategories.count)")
+                    ReadableDetailRow(title: "Budgets", value: "\(snapshot.budgets.count)")
+                    ReadableDetailRow(title: "Recurring Payments", value: "\(snapshot.recurringPayments.count)")
                 }
                 Section {
                     if snapshot.recordCount == 0 {

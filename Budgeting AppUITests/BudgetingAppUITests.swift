@@ -563,6 +563,90 @@ final class BudgetingAppUITests: XCTestCase {
     }
 
     @MainActor
+    func testBudgetPeriodTabsKeepCurrentBudgetAndOpenDetails() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launch()
+        app.buttons["tabMore"].tap()
+        app.buttons["openBudgets"].tap()
+        let name = createPolishTestBudget(in: app)
+        let row = app.buttons["budgetRow-\(name)"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        app.buttons["budgetPeriod-Upcoming"].tap()
+        XCTAssertFalse(row.exists)
+        app.buttons["budgetPeriod-Past"].tap()
+        XCTAssertFalse(row.exists)
+        app.buttons["budgetPeriod-All"].tap()
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        app.buttons["budgetPeriod-Current"].tap()
+        row.tap()
+        XCTAssertTrue(app.buttons["manageBudgetCategories"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Within Budget"].exists)
+        XCTAssertTrue(app.staticTexts["Choose categories to track spending."].exists)
+    }
+
+    @MainActor
+    func testLargeTextDarkModeDockBudgetAndOverviewNavigation() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL", "-appAppearance", "dark"]
+        app.launch()
+        XCTAssertTrue(app.buttons["tabAdd"].waitForExistence(timeout: 10))
+        for id in ["tabOverview", "tabTransactions", "tabAdd", "tabWallets", "tabMore"] {
+            let tab = app.buttons[id]
+            XCTAssertTrue(tab.exists && tab.isHittable)
+            XCTAssertLessThanOrEqual(tab.frame.maxY, app.frame.maxY)
+        }
+        let amount = app.textFields["expenseAmount"]
+        scrollToFormElement(amount, in: app, upward: false)
+        amount.tap(); amount.typeText("12.25")
+        dismissExpenseKeyboard(in: app)
+        XCTAssertEqual(amount.value as? String, "12.25")
+        XCTAssertTrue(app.buttons["tabMore"].isHittable)
+        app.buttons["tabMore"].tap()
+        scrollToFormElement(app.buttons["openBudgets"], in: app)
+        app.buttons["openBudgets"].tap()
+        let name = createPolishTestBudget(in: app)
+        let row = app.buttons["budgetRow-\(name)"]
+        scrollToFormElement(row, in: app)
+        XCTAssertTrue(row.isHittable)
+        // Scroll the card's lower content into view; the dock must retain its own space.
+        app.swipeUp()
+        XCTAssertTrue(app.buttons["tabMore"].isHittable)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Budgets — large text and dark mode"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        app.buttons["tabOverview"].tap()
+        XCTAssertTrue(app.navigationBars["Overview"].waitForExistence(timeout: 5))
+        app.buttons["tabWallets"].tap()
+        XCTAssertTrue(app.navigationBars["Wallets"].waitForExistence(timeout: 5))
+        app.buttons["tabTransactions"].tap()
+        XCTAssertTrue(app.navigationBars["Transactions"].waitForExistence(timeout: 5))
+        app.buttons["tabAdd"].tap()
+        scrollToFormElement(amount, in: app, upward: false)
+        XCTAssertEqual(amount.value as? String, "12.25")
+    }
+
+    @MainActor
+    private func createPolishTestBudget(in app: XCUIApplication) -> String {
+        app.buttons["openCreateBudget"].tap()
+        let name = "UI budget with a longer descriptive name \(UUID().uuidString.prefix(8))"
+        let field = app.textFields["budgetFormName"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap(); field.typeText(name)
+        app.buttons["budgetFormKeyboardDone"].tap()
+        let amount = app.textFields["budgetFormAmount"]
+        scrollToFormElement(amount, in: app)
+        amount.tap(); amount.typeText("123456.75")
+        app.buttons["budgetFormKeyboardDone"].tap()
+        XCTAssertTrue(app.buttons["createBudget"].isEnabled)
+        app.buttons["createBudget"].tap()
+        XCTAssertTrue(app.navigationBars["Budgets"].waitForExistence(timeout: 5))
+        return name
+    }
+
+    @MainActor
     private func openFormTestWallet(_ name: String, in app: XCUIApplication) {
         app.buttons["tabWallets"].tap()
         let wallet = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", name)).firstMatch

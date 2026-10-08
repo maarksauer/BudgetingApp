@@ -10,6 +10,9 @@ struct CategoriesView: View {
 
     var body: some View {
         List {
+            if categories.isEmpty {
+                ContentUnavailableView("No Categories Yet", systemImage: "tag", description: Text("Use the + button to create your first spending category."))
+            }
             ForEach(categories) { category in
 
                 NavigationLink {
@@ -18,10 +21,10 @@ struct CategoriesView: View {
                     HStack(spacing: 14) {
 
                         Image(systemName: category.icon)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(colorFromName(category.colorName))
                             .frame(width: 42, height: 42)
                             .background(
-                                colorFromName(category.colorName)
+                                colorFromName(category.colorName).opacity(0.14)
                             )
                             .clipShape(
                                 RoundedRectangle(cornerRadius: 12)
@@ -39,6 +42,7 @@ struct CategoriesView: View {
                         }
                     }
                     .padding(.vertical, 4)
+                    .accessibilityElement(children: .combine)
                 }
             }
         }
@@ -50,6 +54,7 @@ struct CategoriesView: View {
                 } label: {
                     Image(systemName: "plus")
                 }
+                .accessibilityLabel("Add Category")
             }
         }
         .sheet(isPresented: $showingCreateCategory) {

@@ -63,10 +63,10 @@ struct EditCategoryView: View {
                     HStack(spacing: 14) {
 
                         Image(systemName: selectedIcon)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(colorFromName(selectedColor))
                             .frame(width: 46, height: 46)
                             .background(
-                                colorFromName(selectedColor)
+                                colorFromName(selectedColor).opacity(0.14)
                             )
                             .clipShape(
                                 RoundedRectangle(cornerRadius: 12)
@@ -93,7 +93,7 @@ struct EditCategoryView: View {
                                 selectedIcon = icon
                             } label: {
                                 Image(systemName: icon)
-                                    .font(.title2)
+                                    .font(.system(size: 24))
                                     .frame(width: 48, height: 48)
                                     .background(
                                         selectedIcon == icon
@@ -105,13 +105,15 @@ struct EditCategoryView: View {
                                     )
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel(FormPalette.categoryIconTitle(icon))
+                            .accessibilityAddTraits(selectedIcon == icon ? .isSelected : [])
                         }
                     }
                     .padding(.vertical, 6)
                 }
 
                 Section("Colour") {
-                    HStack(spacing: 14) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 48))], spacing: 12) {
                         ForEach(colors, id: \.self) { colorName in
                             Button {
                                 selectedColor = colorName
@@ -124,12 +126,16 @@ struct EditCategoryView: View {
                                     .overlay {
                                         if selectedColor == colorName {
                                             Image(systemName: "checkmark")
-                                                .font(.caption.bold())
+                                                .font(.system(size: 13, weight: .bold))
                                                 .foregroundStyle(.white)
                                         }
                                     }
+                                    .frame(width: 44, height: 44)
+                                    .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel(colorName.capitalized)
+                            .accessibilityAddTraits(selectedColor == colorName ? .isSelected : [])
                         }
                     }
                     .padding(.vertical, 6)

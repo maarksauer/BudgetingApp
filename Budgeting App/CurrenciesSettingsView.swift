@@ -57,7 +57,7 @@ struct CurrenciesSettingsView: View {
             set: { storedPreferences = preferences.settingEnabled(code, to: $0).storageValue }
         )) {
             VStack(alignment: .leading, spacing: 3) {
-                HStack {
+                VStack(alignment: .leading, spacing: 3) {
                     Text(code).font(.headline)
                     if code == preferences.defaultCode {
                         Text("Default").font(.caption).foregroundStyle(.secondary)

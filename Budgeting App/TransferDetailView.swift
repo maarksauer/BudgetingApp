@@ -36,7 +36,7 @@ struct TransferDetailView: View {
                     TransferAmountValue(title: "Received", amount: transfer.destinationAmount, currency: transfer.destinationCurrencyCode, tint: .green)
                 }
                 Section("Details") {
-                    LabeledContent("Date", value: transfer.date.formatted(date: .long, time: .omitted))
+                    ReadableDetailRow(title: "Date", value: transfer.date.formatted(date: .long, time: .omitted))
                     Text(transfer.note.isEmpty ? "No note" : transfer.note)
                         .foregroundStyle(transfer.note.isEmpty ? .secondary : .primary)
                 }

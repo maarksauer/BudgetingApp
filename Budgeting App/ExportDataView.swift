@@ -44,7 +44,7 @@ struct ExportDataView: View {
             Section {
                 Text("Export your transactions to a CSV file for Excel or another spreadsheet app.")
                     .foregroundStyle(.secondary)
-                LabeledContent("Rows to export", value: "\(rowCount)")
+                ReadableDetailRow(title: "Rows to export", value: "\(rowCount)")
                     .accessibilityIdentifier("csvExportRowCount")
                 Toggle("Include wallet transfers", isOn: $includeTransfers)
                     .accessibilityIdentifier("csvIncludeTransfers")

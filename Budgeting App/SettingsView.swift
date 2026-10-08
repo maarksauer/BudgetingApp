@@ -28,9 +28,9 @@ struct SettingsView: View {
                     .accessibilityIdentifier("openRecurringPayments")
 
                     NavigationLink(value: MoreRoute.currencies) {
-                        HStack {
+                        AdaptiveValueRow {
                             Label("Currencies", systemImage: "eurosign.circle")
-                            Spacer()
+                        } trailing: {
                             Text("\(CurrencyPreferences.decode(storedCurrencyPreferences).enabledCodes.count) enabled")
                                 .foregroundStyle(.secondary)
                         }
@@ -40,9 +40,9 @@ struct SettingsView: View {
 
                 Section("Preferences") {
                     NavigationLink(value: MoreRoute.appearance) {
-                        HStack {
+                        AdaptiveValueRow {
                             Label("Appearance", systemImage: "circle.lefthalf.filled")
-                            Spacer()
+                        } trailing: {
                             Text(appearance.title).foregroundStyle(.secondary)
                         }
                     }

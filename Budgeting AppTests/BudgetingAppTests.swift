@@ -1387,6 +1387,73 @@ final class BudgetingAppTests: XCTestCase {
         XCTAssertEqual(TransactionActivityList.filtered(rows, search: "HUF 800", filters: TransactionFilters()).map(\.id), [TransactionActivity.transfer(transfer).id])
     }
 
+    @MainActor
+    func testBudgetPresentationShowsThresholdsExactAmountsAndUnclampedOverspending() {
+        let wallet = Wallet(name: "Cash", startingBalance: 500, currencyCode: "EUR", walletType: "Cash")
+        let category = SpendingCategory(name: "Food", icon: "basket", colorName: "green")
+        let budget = Budget(name: "Groceries", totalAmount: 100, currencyCode: "EUR", startDate: date(2026, 10, 1), endDate: date(2026, 10, 31))
+        budget.categories = [category]
+        let expense = ExpenseTransaction(amount: Decimal(string: "79.99")!, date: date(2026, 10, 8), wallet: wallet, category: category)
+        func summary() -> BudgetPresentation { BudgetPresentation(budget: budget, transactions: [expense], now: date(2026, 10, 8), calendar: utcCalendar) }
+        XCTAssertEqual(summary().spendingStatus, "Within Budget")
+        XCTAssertEqual(summary().remaining, Decimal(string: "20.01")!)
+        expense.amount = 80
+        XCTAssertEqual(summary().spendingStatus, "Near Limit")
+        XCTAssertEqual(summary().progress, 0.8, accuracy: 0.00001)
+        expense.amount = 100
+        XCTAssertEqual(summary().spendingStatus, "Limit Reached")
+        XCTAssertFalse(summary().isOverBudget)
+        XCTAssertEqual(summary().displayRemaining, 0)
+        expense.amount = Decimal(string: "120.25")!
+        XCTAssertEqual(summary().spendingStatus, "Over Budget")
+        XCTAssertTrue(summary().isOverBudget)
+        XCTAssertEqual(summary().displayRemaining, Decimal(string: "20.25")!)
+        XCTAssertEqual(summary().progress, 1.2025, accuracy: 0.00001)
+        XCTAssertEqual(summary().visualProgress, 1)
+        XCTAssertEqual(budget.totalAmount, 100)
+        XCTAssertEqual(expense.amount, Decimal(string: "120.25")!)
+    }
+
+    @MainActor
+    func testBudgetPeriodNavigationIncludesBoundaryDaysAndStableOrdering() {
+        let current = Budget(name: "Current", totalAmount: 100, currencyCode: "EUR", startDate: date(2026, 10, 1), endDate: date(2026, 10, 8, hour: 12))
+        let upcoming = Budget(name: "Upcoming", totalAmount: 100, currencyCode: "EUR", startDate: date(2026, 10, 9), endDate: date(2026, 10, 31))
+        let past = Budget(name: "Past", totalAmount: 100, currencyCode: "EUR", startDate: date(2026, 9, 1), endDate: date(2026, 10, 7))
+        let rows = [past, upcoming, current]
+        let now = date(2026, 10, 8, hour: 23, minute: 59)
+        XCTAssertEqual(BudgetPresentation.budgets(rows, in: .current, now: now, calendar: utcCalendar).map(\.name), ["Current"])
+        XCTAssertEqual(BudgetPresentation.budgets(rows, in: .upcoming, now: now, calendar: utcCalendar).map(\.name), ["Upcoming"])
+        XCTAssertEqual(BudgetPresentation.budgets(rows, in: .past, now: now, calendar: utcCalendar).map(\.name), ["Past"])
+        XCTAssertEqual(BudgetPresentation.budgets(rows, in: .all, now: now, calendar: utcCalendar).map(\.name), ["Upcoming", "Current", "Past"])
+        XCTAssertEqual(BudgetPresentation(budget: current, transactions: [], now: now, calendar: utcCalendar).timingLabel, "Ends today")
+        XCTAssertEqual(BudgetPresentation.period(for: upcoming, now: date(2026, 10, 9), calendar: utcCalendar), .current)
+        XCTAssertEqual(BudgetPresentation.period(for: current, now: date(2026, 10, 9), calendar: utcCalendar), .past)
+        let tied = Budget(name: "Tied", totalAmount: 10, currencyCode: "EUR", startDate: current.startDate, endDate: current.endDate)
+        let tiedRows = rows + [tied]
+        XCTAssertEqual(BudgetPresentation.budgets(tiedRows, in: .current, now: now, calendar: utcCalendar).map(\.persistentModelID),
+                       BudgetPresentation.budgets(Array(tiedRows.reversed()), in: .current, now: now, calendar: utcCalendar).map(\.persistentModelID))
+    }
+
+    @MainActor
+    func testBudgetAdjacentPeriodsStayWithinSeriesAndSavedPeriods() {
+        let seriesID = UUID()
+        let first = Budget(name: "Rent", totalAmount: 100, currencyCode: "EUR", startDate: date(2026, 9, 1), endDate: date(2026, 9, 30), seriesID: seriesID)
+        let current = Budget(name: "Renamed", totalAmount: 120, currencyCode: "EUR", startDate: date(2026, 10, 1), endDate: date(2026, 10, 31), seriesID: seriesID)
+        let next = Budget(name: "Rent", totalAmount: 150, currencyCode: "EUR", startDate: date(2026, 11, 1), endDate: date(2026, 11, 30), seriesID: seriesID)
+        let unrelated = Budget(name: "Rent", totalAmount: 200, currencyCode: "HUF", startDate: date(2026, 10, 15), endDate: date(2026, 11, 15))
+        let rows = [next, unrelated, first, current]
+        let neighbors = BudgetPresentation.adjacentPeriods(of: current, in: rows)
+        XCTAssertEqual(neighbors.previous?.persistentModelID, first.persistentModelID)
+        XCTAssertEqual(neighbors.next?.persistentModelID, next.persistentModelID)
+        XCTAssertNil(BudgetPresentation.adjacentPeriods(of: first, in: rows).previous)
+        XCTAssertNil(BudgetPresentation.adjacentPeriods(of: next, in: rows).next)
+        XCTAssertNil(BudgetPresentation.adjacentPeriods(of: unrelated, in: rows).previous)
+        XCTAssertNil(BudgetPresentation.adjacentPeriods(of: unrelated, in: rows).next)
+        XCTAssertNil(BudgetPresentation.adjacentPeriods(of: current, in: [first, next]).next)
+        XCTAssertEqual(rows.count, 4)
+        XCTAssertFalse(first.isRecurring)
+    }
+
     private var utcCalendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!

@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 
 struct RecurringPaymentsView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.modelContext) private var modelContext
     @State private var showingSaveError = false
     @State private var showingPostponeError = false
@@ -28,7 +29,7 @@ struct RecurringPaymentsView: View {
 
             if payments.isEmpty {
 
-                emptyState
+                ScrollView { emptyState }
 
             } else {
 
@@ -352,6 +353,12 @@ struct RecurringPaymentsView: View {
             }
     }
 
+    private var actionLayout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize
+        ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
+        : AnyLayout(HStackLayout(spacing: 10))
+    }
+
     // MARK: - Actionable Row
 
     private func actionablePaymentRow(
@@ -368,9 +375,7 @@ struct RecurringPaymentsView: View {
             }
             .accessibilityIdentifier("recurringPayment-\(payment.name)")
 
-            HStack(
-                spacing: 10
-            ) {
+            actionLayout {
 
                 // PAID
 
@@ -390,9 +395,8 @@ struct RecurringPaymentsView: View {
                         maxWidth:
                             .infinity
                     )
-                    .frame(
-                        height: 46
-                    )
+                    .padding(.vertical, 12)
+                    .frame(minHeight: 46)
                     .foregroundStyle(
                         .white
                     )
@@ -426,9 +430,8 @@ struct RecurringPaymentsView: View {
                         maxWidth:
                             .infinity
                     )
-                    .frame(
-                        height: 46
-                    )
+                    .padding(.vertical, 12)
+                    .frame(minHeight: 46)
                     .foregroundStyle(
                         Color.accentColor
                     )
@@ -480,9 +483,8 @@ struct RecurringPaymentsView: View {
                             )
                     )
                 }
-                .buttonStyle(
-                    .plain
-                )
+                .buttonStyle(.plain)
+                .accessibilityLabel("Skip \(payment.name)")
             }
         }
         .padding(
@@ -500,10 +502,10 @@ struct RecurringPaymentsView: View {
                 tint: FormPalette.color(payment.category?.colorName ?? "blue"),
                 amount: payment.amount.formatted(.number), currency: payment.wallet?.currencyCode ?? "", secondaryAmount: nil
             )
-            HStack(alignment: .top) {
+            AdaptiveValueRow {
                 Label(paymentDateText(payment), systemImage: "calendar")
                     .font(.caption).foregroundStyle(paymentDateColor(payment))
-                Spacer()
+            } trailing: {
                 statusBadge(payment)
             }
         }

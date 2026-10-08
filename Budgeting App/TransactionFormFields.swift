@@ -89,15 +89,12 @@ struct TransactionAmountSection: View {
             VStack(alignment: .leading, spacing: 12) {
                 Label(title, systemImage: symbol)
                     .font(.subheadline.weight(.semibold)).foregroundStyle(tint)
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                AmountEntryRow(currency: currencyCode) {
                     TextField("0", text: $amount)
                         .font(.largeTitle.weight(.semibold)).monospacedDigit()
                         .keyboardType(.decimalPad)
                         .focused(focusedField, equals: .amount)
                         .accessibilityLabel("Amount").accessibilityIdentifier(identifier)
-                    if !currencyCode.isEmpty {
-                        Text(currencyCode).font(.headline).foregroundStyle(.secondary)
-                    }
                 }
                 if !amount.isEmpty && AmountInput.positive(amount) == nil {
                     FormValidationMessage(text: "Enter a complete amount greater than zero.")
@@ -257,6 +254,28 @@ struct RecurringPaymentFormFields: View {
 }
 
 nonisolated enum FormPalette {
+    static func categoryIconTitle(_ symbol: String) -> String {
+        switch symbol {
+        case "fork.knife": "Food"
+        case "car.fill": "Transport"
+        case "house.fill": "Home"
+        case "bag.fill": "Shopping"
+        case "doc.text.fill": "Bills"
+        case "heart.fill": "Health"
+        case "cross.case.fill": "Medical"
+        case "gamecontroller.fill": "Games"
+        case "airplane": "Travel"
+        case "gift.fill": "Gifts"
+        case "graduationcap.fill": "Education"
+        case "pawprint.fill": "Pets"
+        case "dumbbell.fill": "Fitness"
+        case "cup.and.saucer.fill": "Coffee"
+        case "cart.fill": "Groceries"
+        case "phone.fill": "Phone"
+        default: "Category Icon"
+        }
+    }
+
     static func color(_ name: String) -> Color {
         switch name {
         case "green": .green
@@ -283,19 +302,10 @@ struct TransactionSummaryRow: View {
     let secondaryAmount: String?
 
     var body: some View {
-        Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: 12) {
-                    description
-                    amounts
-                }
-            } else {
-                HStack(alignment: .top, spacing: 12) {
-                    description
-                    Spacer(minLength: 8)
-                    amounts
-                }
-            }
+        AdaptiveValueRow {
+            description
+        } trailing: {
+            amounts
         }
         .padding(.vertical, 8)
         .accessibilityElement(children: .combine)

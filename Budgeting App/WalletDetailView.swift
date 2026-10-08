@@ -62,9 +62,7 @@ struct WalletDetailView: View {
                             systemName:
                                 wallet.icon
                         )
-                        .font(
-                            .title2
-                        )
+                        .font(.system(size: 24))
                         .frame(
                             width: 46,
                             height: 46
@@ -292,57 +290,14 @@ struct WalletDetailView: View {
         }
     }
 
-    private func transactionRow(
-        _ transaction:
-            ExpenseTransaction
-    ) -> some View {
-
-        HStack {
-
-            VStack(
-                alignment:
-                    .leading,
-                spacing: 4
-            ) {
-
-                Text(
-                    transactionTitle(
-                        transaction
-                    )
-                )
-                .fontWeight(
-                    .medium
-                )
-
-                Text(
-                    transaction.date
-                        .formatted(
-                            date:
-                                .abbreviated,
-                            time:
-                                .omitted
-                        )
-                )
-                .font(.caption)
-                .foregroundStyle(
-                    .secondary
-                )
-            }
-
-            Spacer()
-
-            Text(
-                "\(transaction.amountSign)\(transaction.amount.formatted(.number)) \(wallet.currencyCode)"
-            )
-            .foregroundStyle(transaction.isIncome ? Color.green : Color.primary)
-            .fontWeight(
-                .semibold
-            )
-        }
-        .padding(
-            .vertical,
-            3
-        )
+    private func transactionRow(_ transaction: ExpenseTransaction) -> some View {
+        TransactionSummaryRow(
+            title: transactionTitle(transaction), subtitle: transaction.typeName,
+            detail: transaction.date.formatted(date: .abbreviated, time: .omitted),
+            symbol: transaction.isIncome ? "arrow.down.left" : transaction.category?.icon ?? "creditcard.fill",
+            tint: transaction.isIncome ? .green : FormPalette.color(transaction.category?.colorName ?? "gray"),
+            amount: "\(transaction.amountSign)\(transaction.amount.formatted(.number))",
+            currency: wallet.currencyCode, secondaryAmount: nil)
     }
 
     private func transactionTitle(
@@ -379,26 +334,8 @@ struct WalletDetailView: View {
         return transaction.typeName
     }
 
-    private func detailRow(
-        title: String,
-        value: String
-    ) -> some View {
-
-        HStack {
-
-            Text(
-                title
-            )
-
-            Spacer()
-
-            Text(
-                value
-            )
-            .foregroundStyle(
-                .secondary
-            )
-        }
+    private func detailRow(title: String, value: String) -> some View {
+        ReadableDetailRow(title: title, value: value)
     }
 
     private func colorFromName(

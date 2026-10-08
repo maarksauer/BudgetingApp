@@ -30,11 +30,11 @@ struct TransactionDetailView: View {
             } else {
                 summary
                 Section("Details") {
-                    LabeledContent("Date", value: transaction.date.formatted(date: .long, time: .omitted))
-                    LabeledContent("Wallet", value: transaction.wallet?.name ?? "None")
+                    ReadableDetailRow(title: "Date", value: transaction.date.formatted(date: .long, time: .omitted))
+                    ReadableDetailRow(title: "Wallet", value: transaction.wallet?.name ?? "None")
                     if !transaction.isIncome {
-                        LabeledContent("Category", value: transaction.category?.name ?? "Uncategorized")
-                        LabeledContent("Subcategory", value: transaction.subcategory?.name ?? "None")
+                        ReadableDetailRow(title: "Category", value: transaction.category?.name ?? "Uncategorized")
+                        ReadableDetailRow(title: "Subcategory", value: transaction.subcategory?.name ?? "None")
                     }
                 }
                 Section(transaction.isIncome ? "Source or Note" : "Note") {
@@ -43,7 +43,7 @@ struct TransactionDetailView: View {
                 }
                 if let payment = transaction.recurringPayment, transaction.recurringScheduledDate != nil {
                     Section("Recurring Payment") {
-                        LabeledContent("Payment", value: payment.name)
+                        ReadableDetailRow(title: "Payment", value: payment.name)
                         Button(role: .destructive) { showingRevertConfirmation = true } label: {
                             Label("Revert Recurring Payment", systemImage: "arrow.uturn.backward.circle")
                         }

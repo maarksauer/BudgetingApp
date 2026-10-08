@@ -38,6 +38,7 @@ private enum AppTab: Int, CaseIterable {
 }
 
 struct MainTabView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var selectedTab: AppTab = .add
     @State private var expenseDraft = ExpenseDraft()
     @State private var morePath: [MoreRoute] = []
@@ -119,8 +120,9 @@ struct MainTabView: View {
                                 .font(.system(size: 21, weight: .medium))
                                 .frame(height: 32)
                         }
-                        Text(tab.title)
-                            .font(.caption2)
+                        if !dynamicTypeSize.isAccessibilitySize {
+                            Text(tab.title).font(.caption2)
+                        }
                     }
                     .foregroundStyle(selectedTab == tab ? Color.accentColor : Color.secondary)
                     .frame(maxWidth: .infinity, minHeight: 56, alignment: .bottom)

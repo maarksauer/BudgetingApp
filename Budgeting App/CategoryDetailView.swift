@@ -29,11 +29,11 @@ struct CategoryDetailView: View {
                 HStack(spacing: 14) {
 
                     Image(systemName: category.icon)
-                        .font(.title2)
-                        .foregroundStyle(.white)
+                        .font(.system(size: 24))
+                        .foregroundStyle(colorFromName(category.colorName))
                         .frame(width: 50, height: 50)
                         .background(
-                            colorFromName(category.colorName)
+                            colorFromName(category.colorName).opacity(0.14)
                         )
                         .clipShape(
                             RoundedRectangle(cornerRadius: 14)
@@ -81,6 +81,8 @@ struct CategoryDetailView: View {
                                 Image(systemName: "pencil")
                             }
                             .buttonStyle(.borderless)
+                            .frame(minWidth: 44, minHeight: 44)
+                            .accessibilityLabel("Rename \(subcategory.name)")
                         }
                     }
                     .onDelete(perform: deleteSubcategories)

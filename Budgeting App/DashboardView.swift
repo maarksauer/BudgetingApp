@@ -88,12 +88,11 @@ struct DashboardView: View {
                         .font(.title2.weight(.semibold))
                 } else {
                     ForEach(totals) { total in
-                        HStack(alignment: .firstTextBaseline) {
+                        AdaptiveValueRow {
                             Text(total.amount, format: .currency(code: total.currencyCode))
                                 .font(.largeTitle.weight(.bold))
                                 .monospacedDigit()
-                                .minimumScaleFactor(0.7)
-                            Spacer()
+                        } trailing: {
                             Text(total.currencyCode)
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
@@ -132,12 +131,11 @@ struct DashboardView: View {
                         .font(.title2.weight(.semibold))
                 } else {
                     ForEach(income) { total in
-                        HStack(alignment: .firstTextBaseline) {
+                        AdaptiveValueRow {
                             Text(total.amount, format: .currency(code: total.currencyCode))
                                 .font(.title.weight(.bold))
                                 .monospacedDigit()
-                                .minimumScaleFactor(0.7)
-                            Spacer()
+                        } trailing: {
                             Text(total.currencyCode)
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
@@ -147,10 +145,10 @@ struct DashboardView: View {
                     Text("Net cash flow")
                         .font(.subheadline.weight(.semibold))
                     ForEach(cashFlow) { total in
-                        HStack {
+                        AdaptiveValueRow {
                             Text(total.currencyCode)
                                 .foregroundStyle(.secondary)
-                            Spacer()
+                        } trailing: {
                             Text(total.amount, format: .currency(code: total.currencyCode))
                                 .fontWeight(.semibold)
                                 .monospacedDigit()
@@ -192,27 +190,13 @@ struct DashboardView: View {
                             NavigationLink {
                                 WalletDetailView(wallet: wallet)
                             } label: {
-                                HStack(spacing: 12) {
-                                    Image(systemName: wallet.icon)
-                                        .font(.title3)
+                                AdaptiveValueRow {
+                                    Label(wallet.name, systemImage: wallet.icon)
                                         .foregroundStyle(color(named: wallet.colorName))
-                                        .frame(width: 40, height: 40)
-                                        .background(color(named: wallet.colorName).opacity(0.12))
-                                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(wallet.name).fontWeight(.medium)
-                                        Text(wallet.currencyCode)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    Spacer()
+                                } trailing: {
                                     Text(DashboardMetrics.balance(for: wallet, transfers: transfers),
                                          format: .currency(code: wallet.currencyCode))
-                                        .fontWeight(.semibold)
-                                        .monospacedDigit()
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .fontWeight(.semibold).monospacedDigit()
                                 }
                             }
                             .buttonStyle(.plain)
@@ -238,7 +222,7 @@ struct DashboardView: View {
                     NavigationLink {
                         BudgetDetailView(budget: budget)
                     } label: {
-                        budgetCard(budget)
+                        budgetCard(budget, now: now)
                     }
                     .buttonStyle(.plain)
                 }
@@ -293,71 +277,25 @@ struct DashboardView: View {
 
     private func recentTransactionRow(_ transaction: ExpenseTransaction) -> some View {
         let note = transaction.note.trimmingCharacters(in: .whitespacesAndNewlines)
-        let title = note.isEmpty
-            ? (transaction.isIncome ? "Income" : transaction.subcategory?.name ?? transaction.category?.name ?? "Expense")
-            : note
-        let tint = transaction.isIncome ? Color.green : color(named: transaction.category?.colorName ?? "gray")
-        return HStack(alignment: .top, spacing: 12) {
-            Image(systemName: transaction.isIncome ? "arrow.down.left" : transaction.category?.icon ?? "tag")
-                .foregroundStyle(tint)
-                .frame(width: 36, height: 36)
-                .background(tint.opacity(0.12))
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title).fontWeight(.medium)
-                Text("\(transaction.typeName) · \(transaction.wallet?.name ?? "No wallet")")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text(transaction.date.formatted(date: .abbreviated, time: .omitted))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 8)
-            VStack(alignment: .trailing, spacing: 4) {
-                if let wallet = transaction.wallet {
-                    Text("\(transaction.amountSign)\(transaction.amount.formatted(.currency(code: wallet.currencyCode)))")
-                } else {
-                    Text("\(transaction.amountSign)\(transaction.amount.formatted(.number))")
-                }
-            }
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(transaction.isIncome ? Color.green : Color.primary)
-            .monospacedDigit()
-            Image(systemName: "chevron.right")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
+        let title = note.isEmpty ? (transaction.isIncome ? "Income" : transaction.subcategory?.name ?? transaction.category?.name ?? "Expense") : note
+        return TransactionSummaryRow(
+            title: title, subtitle: "\(transaction.typeName) · \(transaction.wallet?.name ?? "No wallet")",
+            detail: transaction.date.formatted(date: .abbreviated, time: .omitted),
+            symbol: transaction.isIncome ? "arrow.down.left" : transaction.category?.icon ?? "tag",
+            tint: transaction.isIncome ? .green : color(named: transaction.category?.colorName ?? "gray"),
+            amount: "\(transaction.amountSign)\(transaction.amount.formatted(.number))",
+            currency: transaction.wallet?.currencyCode ?? "", secondaryAmount: nil)
     }
 
     private func recentTransferRow(_ transfer: WalletTransfer) -> some View {
         let note = transfer.note.trimmingCharacters(in: .whitespacesAndNewlines)
-        return HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "arrow.left.arrow.right")
-                .foregroundStyle(.blue)
-                .frame(width: 36, height: 36)
-                .background(Color.blue.opacity(0.12))
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-            VStack(alignment: .leading, spacing: 4) {
-                Text(note.isEmpty ? "Wallet transfer" : note).fontWeight(.medium)
-                Text("\(transfer.sourceWallet?.name ?? "Deleted wallet") → \(transfer.destinationWallet?.name ?? "Deleted wallet")")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text("Transfer · \(transfer.date.formatted(date: .abbreviated, time: .omitted))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 8)
-            VStack(alignment: .trailing, spacing: 4) {
-                Text("−\(transfer.sourceAmount.formatted(.currency(code: transfer.sourceCurrencyCode)))")
-                Text("+\(transfer.destinationAmount.formatted(.currency(code: transfer.destinationCurrencyCode)))")
-            }
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.blue)
-            .monospacedDigit()
-            Image(systemName: "chevron.right")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
+        return TransactionSummaryRow(
+            title: note.isEmpty ? "Wallet transfer" : note,
+            subtitle: "\(transfer.sourceWallet?.name ?? "Deleted wallet") → \(transfer.destinationWallet?.name ?? "Deleted wallet")",
+            detail: "Transfer · \(transfer.date.formatted(date: .abbreviated, time: .omitted))",
+            symbol: "arrow.left.arrow.right", tint: .blue,
+            amount: "−\(transfer.sourceAmount.formatted(.number))", currency: transfer.sourceCurrencyCode,
+            secondaryAmount: "+\(transfer.destinationAmount.formatted(.number)) \(transfer.destinationCurrencyCode)")
     }
 
     private func categorySpendingSection(now: Date) -> some View {
@@ -379,9 +317,9 @@ struct DashboardView: View {
                 ForEach(groups) { group in
                     DashboardCard {
                         VStack(alignment: .leading, spacing: 18) {
-                            HStack {
+                            AdaptiveValueRow {
                                 Text(group.currencyCode).font(.headline)
-                                Spacer()
+                            } trailing: {
                                 Text(group.totalAmount, format: .currency(code: group.currencyCode))
                                     .fontWeight(.semibold)
                                     .monospacedDigit()
@@ -409,10 +347,10 @@ struct DashboardView: View {
         let share = total > 0 ? NSDecimalNumber(decimal: category.amount / total).doubleValue : 0
         let tint = color(named: category.colorName)
         return VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
+            AdaptiveValueRow {
                 Label(category.name, systemImage: category.icon)
                     .foregroundStyle(tint)
-                Spacer(minLength: 8)
+            } trailing: {
                 Text(category.amount, format: .currency(code: currency))
                     .fontWeight(.semibold)
                     .monospacedDigit()
@@ -430,39 +368,8 @@ struct DashboardView: View {
         }
     }
 
-    private func budgetCard(_ budget: Budget) -> some View {
-        let spent = DashboardMetrics.spent(for: budget, transactions: transactions)
-        let remaining = budget.totalAmount - spent
-        let overBudget = remaining < 0
-        let progress = budget.totalAmount > 0
-            ? NSDecimalNumber(decimal: spent / budget.totalAmount).doubleValue : 0
-
-        return DashboardCard {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text(budget.name).font(.headline)
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                ProgressView(value: min(max(progress, 0), 1))
-                    .tint(overBudget ? .red : .blue)
-                HStack {
-                    Text(overBudget ? "Over budget" : "Remaining")
-                        .foregroundStyle(overBudget ? Color.red : Color.secondary)
-                    Spacer()
-                    Text(overBudget ? -remaining : remaining,
-                         format: .currency(code: budget.currencyCode))
-                        .fontWeight(.semibold)
-                        .foregroundStyle(overBudget ? Color.red : Color.primary)
-                }
-                .font(.subheadline)
-                Text("\(spent.formatted(.currency(code: budget.currencyCode))) of \(budget.totalAmount.formatted(.currency(code: budget.currencyCode))) used")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
+    private func budgetCard(_ budget: Budget, now: Date) -> some View {
+        BudgetSummaryCard(budget: budget, transactions: transactions, now: now)
     }
 
     private func paymentSection(now: Date) -> some View {
@@ -496,35 +403,17 @@ struct DashboardView: View {
     }
 
     private func paymentRow(_ payment: RecurringPayment, now: Date) -> some View {
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: now)
-        let dueDate = calendar.startOfDay(for: payment.nextPaymentDate)
-
-        return HStack(spacing: 12) {
-            Image(systemName: "calendar")
-                .foregroundStyle(dueDate <= today ? Color.orange : Color.blue)
-                .frame(width: 32)
+        let today = Calendar.current.startOfDay(for: now)
+        return AdaptiveValueRow {
+            VStack(alignment: .leading, spacing: 5) {
+                Label(payment.name, systemImage: "calendar").fontWeight(.medium)
+                Text(paymentDateText(payment, today: today)).font(.caption).foregroundStyle(.secondary)
+            }
+        } trailing: {
             VStack(alignment: .leading, spacing: 4) {
-                Text(payment.name).fontWeight(.medium)
-                Text(paymentDateText(payment, today: today))
-                    .font(.caption)
-                    .foregroundStyle(dueDate <= today ? Color.orange : Color.secondary)
+                Text(payment.amount.formatted(.number)).fontWeight(.semibold).monospacedDigit()
+                Text(payment.wallet?.currencyCode ?? "No wallet selected").font(.caption).foregroundStyle(.secondary)
             }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 4) {
-                if let wallet = payment.wallet {
-                    Text(payment.amount, format: .currency(code: wallet.currencyCode))
-                        .fontWeight(.semibold)
-                } else {
-                    Text(payment.amount, format: .number).fontWeight(.semibold)
-                    Text("No wallet selected")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            Image(systemName: "chevron.right")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
     }
 

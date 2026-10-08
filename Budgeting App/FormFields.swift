@@ -57,7 +57,7 @@ struct WalletFormFields: View {
             Section {
                 HStack(alignment: .top, spacing: 14) {
                     Image(systemName: draft.icon)
-                        .font(.title2).foregroundStyle(WalletFormStyle.color(draft.colorName))
+                        .font(.system(size: 24)).foregroundStyle(WalletFormStyle.color(draft.colorName))
                         .frame(width: 50, height: 50)
                         .background(WalletFormStyle.color(draft.colorName).opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
                     VStack(alignment: .leading, spacing: 5) {
@@ -248,6 +248,77 @@ struct BudgetFormFields: View {
         }
         .onChange(of: draft.startDate) {
             if !draft.periodIsValid { draft.endDate = draft.startDate }
+        }
+    }
+}
+
+// Keep labels and values readable when text grows or the available width shrinks.
+struct AdaptiveValueRow<Leading: View, Trailing: View>: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    let leading: Leading
+    let trailing: Trailing
+
+    init(@ViewBuilder leading: () -> Leading, @ViewBuilder trailing: () -> Trailing) {
+        self.leading = leading()
+        self.trailing = trailing()
+    }
+
+    var body: some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                stacked
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        leading.fixedSize(horizontal: true, vertical: false)
+                        Spacer(minLength: 8)
+                        trailing.fixedSize(horizontal: true, vertical: false)
+                    }
+                    stacked
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var stacked: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            leading
+            trailing
+        }
+    }
+}
+
+struct ReadableDetailRow: View {
+    let title: String
+    let value: String
+    var body: some View {
+        AdaptiveValueRow {
+            Text(title)
+        } trailing: {
+            Text(value).foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+struct AmountEntryRow<Content: View>: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    let currency: String
+    let content: Content
+    init(currency: String, @ViewBuilder content: () -> Content) {
+        self.currency = currency
+        self.content = content()
+    }
+    private var layout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize
+        ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+        : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 12))
+    }
+    var body: some View {
+        layout {
+            content
+            if !currency.isEmpty { Text(currency).font(.headline).foregroundStyle(.secondary) }
         }
     }
 }

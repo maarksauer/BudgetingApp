@@ -46,9 +46,9 @@ struct RecurringPaymentDetailView: View {
                 summary
                 schedule
                 Section("Details") {
-                    LabeledContent("Wallet", value: payment.wallet?.name ?? "None")
-                    LabeledContent("Category", value: payment.category?.name ?? "None")
-                    LabeledContent("Subcategory", value: payment.subcategory?.name ?? "None")
+                    ReadableDetailRow(title: "Wallet", value: payment.wallet?.name ?? "None")
+                    ReadableDetailRow(title: "Category", value: payment.category?.name ?? "None")
+                    ReadableDetailRow(title: "Subcategory", value: payment.subcategory?.name ?? "None")
                 }
                 Section("Note") {
                     Text(payment.note.isEmpty ? "No note" : payment.note)
@@ -57,8 +57,8 @@ struct RecurringPaymentDetailView: View {
                 if payment.isActive && (payment.isDue || payment.isPostponed) { currentActions }
                 if let last = paymentTransactions.first {
                     Section("Last Payment") {
-                        LabeledContent("Paid", value: last.date.formatted(date: .long, time: .omitted))
-                        LabeledContent("Amount", value: last.amount.formatted(.number) + " " + (last.wallet?.currencyCode ?? ""))
+                        ReadableDetailRow(title: "Paid", value: last.date.formatted(date: .long, time: .omitted))
+                        ReadableDetailRow(title: "Amount", value: last.amount.formatted(.number) + " " + (last.wallet?.currencyCode ?? ""))
                     }
                 }
                 if !paymentTransactions.isEmpty {
@@ -166,12 +166,12 @@ struct RecurringPaymentDetailView: View {
 
     private var schedule: some View {
         Section("Schedule") {
-            LabeledContent("Repeat", value: payment.frequency)
+            ReadableDetailRow(title: "Repeat", value: payment.frequency)
             if payment.isPostponed {
-                LabeledContent("Original Schedule", value: payment.scheduledPaymentDate.formatted(date: .long, time: .omitted))
-                LabeledContent("Postponed Until", value: payment.nextPaymentDate.formatted(date: .long, time: .omitted))
+                ReadableDetailRow(title: "Original Schedule", value: payment.scheduledPaymentDate.formatted(date: .long, time: .omitted))
+                ReadableDetailRow(title: "Postponed Until", value: payment.nextPaymentDate.formatted(date: .long, time: .omitted))
             } else {
-                LabeledContent(payment.isDue ? "Due" : "Next Payment", value: payment.nextPaymentDate.formatted(date: .long, time: .omitted))
+                ReadableDetailRow(title: payment.isDue ? "Due" : "Next Payment", value: payment.nextPaymentDate.formatted(date: .long, time: .omitted))
             }
         }
     }

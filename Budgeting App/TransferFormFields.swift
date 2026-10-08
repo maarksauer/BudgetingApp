@@ -195,13 +195,12 @@ private struct TransferAmountInput: View {
         VStack(alignment: .leading, spacing: 12) {
             Label(title, systemImage: field == .sent ? "arrow.up.right.circle.fill" : "arrow.down.left.circle.fill")
                 .font(.subheadline.weight(.semibold)).foregroundStyle(tint)
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
+            AmountEntryRow(currency: currency) {
                 TextField("0", text: $text)
                     .font(.largeTitle.weight(.semibold)).monospacedDigit().keyboardType(.decimalPad)
                     .focused(focusedField, equals: field).submitLabel(advances ? .next : .done).onSubmit(submit)
                     .accessibilityLabel(title).accessibilityIdentifier(identifier)
-                if !currency.isEmpty { Text(currency).font(.headline).foregroundStyle(.secondary) }
-            }
+                }
             if !text.isEmpty && AmountInput.positive(text) == nil {
                 FormValidationMessage(text: "Enter a complete amount greater than zero.")
             }

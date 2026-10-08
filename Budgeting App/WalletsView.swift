@@ -22,7 +22,7 @@ struct WalletsView: View {
 
                 if wallets.isEmpty {
 
-                    emptyState
+                    ScrollView { emptyState }
 
                 } else {
 
@@ -135,91 +135,23 @@ struct WalletsView: View {
         .padding()
     }
 
-    private func walletRow(
-        _ wallet: Wallet
-    ) -> some View {
-
-        HStack(
-            spacing: 14
-        ) {
-
-            Image(
-                systemName:
-                    wallet.icon
-            )
-            .foregroundStyle(
-                colorFromName(
-                    wallet.colorName
-                )
-            )
-            .font(.title3)
-            .frame(
-                width: 42,
-                height: 42
-            )
-            .background(
-                colorFromName(
-                    wallet.colorName
-                )
-                .opacity(0.15)
-            )
-            .clipShape(
-                RoundedRectangle(
-                    cornerRadius: 11
-                )
-            )
-
-            VStack(
-                alignment: .leading,
-                spacing: 4
-            ) {
-
-                Text(
-                    wallet.name
-                )
-                .fontWeight(
-                    .medium
-                )
-
-                Text(
-                    wallet.walletType
-                )
-                .font(.caption)
-                .foregroundStyle(
-                    .secondary
-                )
+    private func walletRow(_ wallet: Wallet) -> some View {
+        AdaptiveValueRow {
+            Label {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(wallet.name).font(.headline)
+                    Text(wallet.walletType).font(.caption).foregroundStyle(.secondary)
+                }
+            } icon: {
+                Image(systemName: wallet.icon).foregroundStyle(FormPalette.color(wallet.colorName))
             }
-
-            Spacer()
-
-            VStack(
-                alignment: .trailing,
-                spacing: 3
-            ) {
-
-                Text(
-                    balance(
-                        for: wallet
-                    ),
-                    format: .number
-                )
-                .fontWeight(
-                    .semibold
-                )
-
-                Text(
-                    wallet.currencyCode
-                )
-                .font(.caption)
-                .foregroundStyle(
-                    .secondary
-                )
+        } trailing: {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(balance(for: wallet).formatted(.number)).fontWeight(.semibold).monospacedDigit()
+                Text(wallet.currencyCode).font(.caption).foregroundStyle(.secondary)
             }
         }
-        .padding(
-            .vertical,
-            4
-        )
+        .padding(.vertical, 8)
     }
 
     private func balance(

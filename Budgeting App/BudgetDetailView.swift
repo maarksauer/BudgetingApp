@@ -24,255 +24,62 @@ struct BudgetDetailView: View {
     var body: some View {
 
         List {
-
             Section {
-
-                VStack(
-                    alignment: .leading,
-                    spacing: 14
-                ) {
-
-                    HStack {
-
-                        VStack(
-                            alignment: .leading,
-                            spacing: 4
-                        ) {
-
-                            Text("Spent")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-
-                            Text(
-                                spentAmount,
-                                format: .number
-                            )
-                            .font(.title2)
-                            .fontWeight(.semibold)
-                        }
-
-                        Spacer()
-
-                        VStack(
-                            alignment: .trailing,
-                            spacing: 4
-                        ) {
-
-                            Text(
-                                remainingAmount >= 0
-                                ? "Remaining"
-                                : "Over Budget"
-                            )
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-
-                            Text(
-                                displayRemainingAmount,
-                                format: .number
-                            )
-                            .font(.title2)
-                            .fontWeight(.semibold)
-                        }
-                    }
-
-                    ProgressView(
-                        value: visualProgress
-                    )
-
-                    HStack {
-
-                        Text(
-                            "\(Int(actualProgress * 100))% used"
-                        )
-                        .font(.caption)
-                        .foregroundStyle(
-                            isOverBudget
-                            ? .red
-                            : .secondary
-                        )
-
-                        Spacer()
-
-                        Text(budget.currencyCode)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if isOverBudget {
-
-                        Label(
-                            "Budget exceeded by \(displayRemainingAmount.formatted(.number)) \(budget.currencyCode)",
-                            systemImage:
-                                "exclamationmark.triangle.fill"
-                        )
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                    }
-                }
-                .padding(.vertical, 8)
+                Text(budget.name).font(.headline)
+                BudgetProgressSummary(presentation: BudgetPresentation(budget: budget, transactions: transactions))
+                    .padding(.vertical, 8)
             }
-
             Section("Budget") {
-
-                HStack {
-
-                    Text("Total")
-
-                    Spacer()
-
-                    Text(
-                        budget.totalAmount,
-                        format: .number
-                    )
-                    .fontWeight(.semibold)
-
-                    Text(
-                        budget.currencyCode
-                    )
-                    .foregroundStyle(.secondary)
-                }
-
-                HStack {
-
-                    Text("Start")
-
-                    Spacer()
-
-                    Text(
-                        budget.startDate,
-                        format:
-                            .dateTime
-                            .day()
-                            .month()
-                            .year()
-                    )
-                    .foregroundStyle(.secondary)
-                }
-
-                HStack {
-
-                    Text("End")
-
-                    Spacer()
-
-                    Text(
-                        budget.endDate,
-                        format:
-                            .dateTime
-                            .day()
-                            .month()
-                            .year()
-                    )
-                    .foregroundStyle(.secondary)
-                }
-
+                ReadableDetailRow(title: "Total", value: budget.totalAmount.formatted(.currency(code: budget.currencyCode)))
+                ReadableDetailRow(title: "Start", value: budget.startDate.formatted(date: .long, time: .omitted))
+                ReadableDetailRow(title: "End", value: budget.endDate.formatted(date: .long, time: .omitted))
                 if budget.isRecurring {
-
-                    HStack {
-
-                        Text("Repeat")
-
-                        Spacer()
-
-                        Label(
-                            budget.recurrenceType,
-                            systemImage:
-                                "arrow.triangle.2.circlepath"
-                        )
-                        .foregroundStyle(.secondary)
+                    ReadableDetailRow(title: "Repeat", value: budget.recurrenceType)
+                }
+            }
+            if previousPeriod != nil || nextPeriod != nil {
+                Section("Other Periods") {
+                    if let previousPeriod {
+                        NavigationLink { BudgetDetailView(budget: previousPeriod) } label: {
+                            periodLabel("Previous Period", budget: previousPeriod, symbol: "chevron.left")
+                        }
+                        .accessibilityIdentifier("previousBudgetPeriod")
+                    }
+                    if let nextPeriod {
+                        NavigationLink { BudgetDetailView(budget: nextPeriod) } label: {
+                            periodLabel("Next Period", budget: nextPeriod, symbol: "chevron.right")
+                        }
+                        .accessibilityIdentifier("nextBudgetPeriod")
                     }
                 }
             }
-
             Section("Categories") {
-
                 if budget.categories.isEmpty {
-
-                    Text(
-                        "No categories selected"
-                    )
-                    .foregroundStyle(.secondary)
-
+                    Label("Choose categories to include their spending in this budget.", systemImage: "tag")
+                        .foregroundStyle(.secondary)
                 } else {
-
-                    ForEach(
-                        sortedCategories
-                    ) { category in
-
-                        HStack(spacing: 12) {
-
-                            Image(
-                                systemName:
-                                    category.icon
-                            )
-                            .foregroundStyle(.white)
-                            .frame(
-                                width: 36,
-                                height: 36
-                            )
-                            .background(
-                                colorFromName(
-                                    category.colorName
-                                )
-                            )
-                            .clipShape(
-                                RoundedRectangle(
-                                    cornerRadius: 10
-                                )
-                            )
-
-                            Text(
-                                category.name
-                            )
-
-                            Spacer()
-
-                            Text(
-                                spendingForCategory(
-                                    category
-                                ),
-                                format: .number
-                            )
-                            .fontWeight(.medium)
-
-                            Text(
-                                budget.currencyCode
-                            )
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    ForEach(sortedCategories) { category in
+                        AdaptiveValueRow {
+                            Label(category.name, systemImage: category.icon)
+                                .foregroundStyle(FormPalette.color(category.colorName))
+                        } trailing: {
+                            Text(spendingForCategory(category).formatted(.currency(code: budget.currencyCode)))
+                                .fontWeight(.medium).monospacedDigit()
                         }
                     }
                 }
-
-                Button {
-
-                    showingCategoryPicker = true
-
-                } label: {
-
-                    Label(
-                        "Manage Categories",
-                        systemImage: "checklist"
-                    )
+                Button { showingCategoryPicker = true } label: {
+                    Label("Manage Categories", systemImage: "checklist")
                 }
+                .accessibilityIdentifier("manageBudgetCategories")
             }
-
             Section {
-
-                Button(
-                    "Delete Budget",
-                    role: .destructive
-                ) {
-                    showingDeleteOptions = true
-                }
-
+                Button("Delete Budget", role: .destructive) { showingDeleteOptions = true }
             } footer: {
-
-                Text(
-                    "Deleting a budget will not delete any transactions."
-                )
+                Text("Deleting a budget will not delete any transactions.")
             }
         }
+        .listStyle(.insetGrouped)
 
         .navigationTitle(
             budget.name
@@ -368,6 +175,17 @@ struct BudgetDetailView: View {
                 )
             }
         }
+    }
+
+    private var previousPeriod: Budget? { BudgetPresentation.adjacentPeriods(of: budget, in: allBudgets).previous }
+    private var nextPeriod: Budget? { BudgetPresentation.adjacentPeriods(of: budget, in: allBudgets).next }
+    private func periodLabel(_ title: String, budget: Budget, symbol: String) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Label(title, systemImage: symbol).font(.subheadline.weight(.semibold))
+            Text("\(budget.startDate.formatted(date: .abbreviated, time: .omitted)) – \(budget.endDate.formatted(date: .abbreviated, time: .omitted))")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 4)
     }
 
     // MARK: - Recurring Series
@@ -515,72 +333,6 @@ struct BudgetDetailView: View {
                 &&
                 currencyMatches
         }
-    }
-
-    private var spentAmount:
-        Decimal {
-
-        matchingTransactions
-            .reduce(
-                Decimal.zero
-            ) {
-                $0 + $1.amount
-            }
-    }
-
-    private var remainingAmount:
-        Decimal {
-
-        budget.totalAmount -
-            spentAmount
-    }
-
-    private var displayRemainingAmount:
-        Decimal {
-
-        if remainingAmount < 0 {
-            return -remainingAmount
-        }
-
-        return remainingAmount
-    }
-
-    private var actualProgress:
-        Double {
-
-        guard
-            budget.totalAmount > 0
-        else {
-            return 0
-        }
-
-        let decimalProgress =
-            spentAmount /
-            budget.totalAmount
-
-        return NSDecimalNumber(
-            decimal:
-                decimalProgress
-        ).doubleValue
-    }
-
-    private var visualProgress:
-        Double {
-
-        min(
-            max(
-                actualProgress,
-                0
-            ),
-            1
-        )
-    }
-
-    private var isOverBudget:
-        Bool {
-
-        spentAmount >
-            budget.totalAmount
     }
 
     private func spendingForCategory(
