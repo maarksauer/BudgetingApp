@@ -79,7 +79,7 @@ struct TransferFormFields: View {
     }
 
     var body: some View {
-        Section("From") {
+        Section {
             if editingTransfer == nil {
                 Picker(selection: $draft.sourceWallet) {
                     Text("Select Wallet").tag(nil as Wallet?)
@@ -94,9 +94,11 @@ struct TransferFormFields: View {
             TransferAmountInput(title: "Amount sent", currency: draft.sourceCode, tint: .orange,
                                 text: $draft.sourceAmount, field: .sent, advances: draft.differentCurrencies, focusedField: focusedField,
                                 submit: { focusNext() }, identifier: "transferSentAmount")
+        } header: {
+            Text("From")
         } footer: { Text("Use a decimal point or comma, and spaces for thousands.") }
 
-        Section("To") {
+        Section {
             if editingTransfer == nil {
                 Picker(selection: $draft.destinationWallet) {
                     Text("Select Wallet").tag(nil as Wallet?)
@@ -120,6 +122,8 @@ struct TransferFormFields: View {
                 TransferAmountValue(title: "Amount received", amount: draft.sent, currency: draft.destinationCode, tint: .green)
                     .accessibilityIdentifier("transferReceivedPreview")
             }
+        } header: {
+            Text("To")
         } footer: {
             if draft.differentCurrencies {
                 Text("Enter the exact amount received in \(draft.destinationCode).")
@@ -140,7 +144,7 @@ struct TransferFormFields: View {
     }
 
     private var balancePreview: some View {
-        Section("Balance Preview") {
+        Section {
             if let source = draft.sourceWallet {
                 let available = draft.availableAmount(transfers: transfers, editing: editingTransfer)
                 LabeledContent("Available to Transfer", value: available.formatted(.currency(code: draft.sourceCode)))
@@ -160,6 +164,8 @@ struct TransferFormFields: View {
                 Text("A wallet from this transfer no longer exists. Its saved currency is retained in the history.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+        } header: {
+            Text("Balance Preview")
         } footer: {
             if editingTransfer != nil {
                 Text("The preview replaces the original transfer. Wallets and currencies stay fixed for this transfer.")
