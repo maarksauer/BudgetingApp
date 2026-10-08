@@ -99,6 +99,8 @@ struct WalletFormFields: View {
                 Picker("Currency", selection: $draft.currencyCode) {
                     ForEach(currencyCodes, id: \.self) { Text($0).tag($0) }
                 }
+                .pickerStyle(.menu)
+                .accessibilityIdentifier("walletFormCurrency")
                 NavigationLink("Manage Currencies") { CurrenciesSettingsView() }
             } else {
                 LabeledContent("Currency", value: draft.currencyCode)

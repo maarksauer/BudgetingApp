@@ -203,6 +203,7 @@ struct WalletDetailView: View {
                             .infinity
                     )
                 }
+                .accessibilityIdentifier("openCreateTransfer")
             }
 
             Section(

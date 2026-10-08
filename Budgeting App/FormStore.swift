@@ -292,3 +292,44 @@ extension FormStore {
         }
     }
 }
+
+@MainActor
+extension FormStore {
+    @discardableResult
+    static func createTransfer(_ draft: TransferFormDraft, context: ModelContext,
+                               commit: (ModelContext) throws -> Void = { try $0.save() }) throws -> WalletTransfer {
+        let wallets = try context.fetch(FetchDescriptor<Wallet>())
+        let transfers = try context.fetch(FetchDescriptor<WalletTransfer>())
+        guard draft.canSave(transfers: transfers), let source = draft.sourceWallet, let destination = draft.destinationWallet,
+              wallets.contains(where: { $0.persistentModelID == source.persistentModelID }),
+              wallets.contains(where: { $0.persistentModelID == destination.persistentModelID }),
+              draft.sourceCode == source.currencyCode, draft.destinationCode == destination.currencyCode,
+              let sent = draft.sent, let received = draft.received
+        else { throw SaveError.invalidFields }
+        return try perform(context: context, commit: commit) {
+            let transfer = WalletTransfer(sourceAmount: sent, destinationAmount: received, date: draft.date,
+                                          note: draft.cleanedNote, sourceWallet: source, destinationWallet: destination)
+            context.insert(transfer)
+            return transfer
+        }
+    }
+
+    static func updateTransfer(_ transfer: WalletTransfer, draft: TransferFormDraft, context: ModelContext,
+                               commit: (ModelContext) throws -> Void = { try $0.save() }) throws {
+        let transfers = try context.fetch(FetchDescriptor<WalletTransfer>())
+        guard transfers.contains(where: { $0.persistentModelID == transfer.persistentModelID }),
+              draft.canSave(transfers: transfers, editing: transfer), let sent = draft.sent, let received = draft.received
+        else { throw SaveError.invalidFields }
+        try perform(context: context, commit: commit) {
+            transfer.sourceAmount = sent
+            transfer.destinationAmount = received
+            transfer.date = draft.date
+            transfer.note = draft.cleanedNote
+        }
+    }
+
+    static func deleteTransfer(_ transfer: WalletTransfer, context: ModelContext,
+                               commit: (ModelContext) throws -> Void = { try $0.save() }) throws {
+        try perform(context: context, commit: commit) { context.delete(transfer) }
+    }
+}

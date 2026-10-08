@@ -409,7 +409,136 @@ final class BudgetingAppUITests: XCTestCase {
     }
 
     @MainActor
-    private func createFormTestWallet(in app: XCUIApplication) -> String {
+    func testSameCurrencyTransferKeyboardSaveEditAndCancel() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launch()
+        let sourceName = createFormTestWallet(in: app)
+        let destinationName = createFormTestWallet(in: app)
+        openFormTestWallet(sourceName, in: app)
+        let open = app.buttons["openCreateTransfer"]
+        scrollToFormElement(open, in: app)
+        open.tap()
+        XCTAssertTrue(app.navigationBars["New Transfer"].waitForExistence(timeout: 5))
+        chooseFormWallet(destinationName, prefix: "transferDestination", in: app)
+        let sent = app.textFields["transferSentAmount"]
+        scrollToFormElement(sent, in: app, upward: false)
+        sent.tap(); sent.typeText("12.25")
+        app.buttons["transferKeyboardDone"].tap()
+        assertKeyboardHidden(in: app)
+        XCTAssertEqual(sent.value as? String, "12.25")
+        XCTAssertFalse(app.textFields["transferReceivedAmount"].exists)
+        let noteValue = "UI transfer \(UUID().uuidString.prefix(8))"
+        let note = app.textFields["transferNote"]
+        scrollToFormElement(note, in: app)
+        note.tap(); note.typeText(noteValue + "\n")
+        assertKeyboardHidden(in: app)
+        XCTAssertEqual(note.value as? String, noteValue)
+        XCTAssertTrue(app.buttons["createTransfer"].isEnabled)
+        app.buttons["createTransfer"].tap()
+        XCTAssertTrue(app.navigationBars[sourceName].waitForExistence(timeout: 5))
+        openTransferByNote(noteValue, in: app)
+        app.buttons["editTransfer"].tap()
+        XCTAssertTrue(app.navigationBars["Edit Transfer"].waitForExistence(timeout: 5))
+        replaceFormText(sent, with: "0")
+        app.buttons["transferKeyboardDone"].tap()
+        assertKeyboardHidden(in: app)
+        XCTAssertFalse(app.buttons["saveTransferEdit"].isEnabled)
+        replaceFormText(sent, with: "12.75")
+        app.buttons["transferKeyboardDone"].tap()
+        app.buttons["saveTransferEdit"].tap()
+        XCTAssertTrue(app.navigationBars["Transfer"].waitForExistence(timeout: 5))
+        app.buttons["editTransfer"].tap()
+        XCTAssertEqual(sent.value as? String, "12.75")
+        replaceFormText(sent, with: "999")
+        app.buttons["transferKeyboardDone"].tap()
+        app.buttons["cancelTransferForm"].tap()
+        app.buttons["editTransfer"].tap()
+        XCTAssertEqual(sent.value as? String, "12.75")
+        XCTAssertFalse(app.keyboards.firstMatch.exists)
+        app.buttons["cancelTransferForm"].tap()
+    }
+
+    @MainActor
+    func testCrossCurrencyTransferNextDoneAndBothAmountsSurviveSave() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launch()
+        let sourceName = createFormTestWallet(in: app, currency: "EUR")
+        let destinationName = createFormTestWallet(in: app, currency: "HUF")
+        openFormTestWallet(sourceName, in: app)
+        let open = app.buttons["openCreateTransfer"]
+        scrollToFormElement(open, in: app); open.tap()
+        chooseFormWallet(destinationName, prefix: "transferDestination", in: app)
+        let sent = app.textFields["transferSentAmount"]
+        scrollToFormElement(sent, in: app, upward: false)
+        sent.tap(); sent.typeText("50")
+        let next = app.buttons["transferKeyboardNext"]
+        XCTAssertTrue(next.waitForExistence(timeout: 5)); next.tap()
+        let received = app.textFields["transferReceivedAmount"]
+        XCTAssertTrue(received.waitForExistence(timeout: 5))
+        received.typeText("20000")
+        app.buttons["transferKeyboardDone"].tap()
+        assertKeyboardHidden(in: app)
+        XCTAssertEqual(sent.value as? String, "50")
+        XCTAssertEqual(received.value as? String, "20000")
+        let noteValue = "UI exchange \(UUID().uuidString.prefix(8))"
+        let note = app.textFields["transferNote"]
+        scrollToFormElement(note, in: app)
+        note.tap(); note.typeText(noteValue)
+        app.buttons["transferKeyboardDone"].tap()
+        assertKeyboardHidden(in: app)
+        XCTAssertTrue(app.buttons["createTransfer"].isEnabled)
+        app.buttons["createTransfer"].tap()
+        XCTAssertTrue(app.navigationBars[sourceName].waitForExistence(timeout: 5))
+        openTransferByNote(noteValue, in: app)
+        app.buttons["editTransfer"].tap()
+        XCTAssertTrue(app.navigationBars["Edit Transfer"].waitForExistence(timeout: 5))
+        XCTAssertEqual(sent.value as? String, "50")
+        XCTAssertEqual(received.value as? String, "20000")
+        scrollToFormElement(received, in: app)
+        replaceFormText(received, with: "0")
+        app.buttons["transferKeyboardDone"].tap()
+        XCTAssertFalse(app.buttons["saveTransferEdit"].isEnabled)
+        app.buttons["cancelTransferForm"].tap()
+        app.buttons["editTransfer"].tap()
+        XCTAssertEqual(received.value as? String, "20000")
+        app.buttons["cancelTransferForm"].tap()
+    }
+
+    @MainActor
+    private func openFormTestWallet(_ name: String, in app: XCUIApplication) {
+        app.buttons["tabWallets"].tap()
+        let wallet = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", name)).firstMatch
+        scrollToFormElement(wallet, in: app)
+        wallet.tap()
+        XCTAssertTrue(app.navigationBars[name].waitForExistence(timeout: 5))
+    }
+
+    @MainActor
+    private func openTransferByNote(_ note: String, in app: XCUIApplication) {
+        app.buttons["tabTransactions"].tap()
+        let search = app.searchFields.firstMatch
+        scrollToFormElement(search, in: app, upward: false)
+        search.tap(); search.typeText(note + "\n")
+        assertKeyboardHidden(in: app)
+        let row = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", note)).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.tap()
+        XCTAssertTrue(app.navigationBars["Transfer"].waitForExistence(timeout: 5))
+    }
+
+    @MainActor
+    private func scrollToFormElement(_ element: XCUIElement, in app: XCUIApplication, upward: Bool = true) {
+        for _ in 0..<12 {
+            if element.exists && element.isHittable { break }
+            if upward { app.swipeUp() } else { app.swipeDown() }
+        }
+        XCTAssertTrue(element.exists && element.isHittable)
+    }
+
+    @MainActor
+    private func createFormTestWallet(in app: XCUIApplication, currency: String? = nil) -> String {
         let name = "UI wallet \(UUID().uuidString.prefix(8))"
         app.buttons["tabWallets"].tap()
         app.buttons["openCreateWallet"].tap()
@@ -417,6 +546,14 @@ final class BudgetingAppUITests: XCTestCase {
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         field.tap(); field.typeText(name)
         app.buttons["walletFormKeyboardDone"].tap()
+        if let currency {
+            let picker = app.buttons["walletFormCurrency"]
+            scrollToFormElement(picker, in: app)
+            picker.tap()
+            let choice = app.buttons[currency].firstMatch
+            XCTAssertTrue(choice.waitForExistence(timeout: 5))
+            choice.tap()
+        }
         let balance = app.textFields["walletFormBalance"]
         for _ in 0..<8 {
             if balance.exists && balance.isHittable { break }

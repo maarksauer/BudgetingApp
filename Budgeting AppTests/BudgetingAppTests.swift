@@ -1100,6 +1100,150 @@ final class BudgetingAppTests: XCTestCase {
     }
 
     @MainActor
+    func testTransferCreationSameCurrencyUsesExactSentAmountAndRejectsInvalidOrSameWalletDrafts() throws {
+        let context = try backupContext()
+        let source = Wallet(name: "Bank", startingBalance: 100, currencyCode: "EUR", walletType: "Bank Account")
+        let destination = Wallet(name: "Cash", startingBalance: 20, currencyCode: "EUR", walletType: "Cash")
+        context.insert(source); context.insert(destination); try context.save()
+        var draft = TransferFormDraft(sourceWallet: source)
+        draft.destinationWallet = destination; draft.sourceAmount = "12,25"
+        draft.destinationAmount = "999"; draft.note = "  Cash withdrawal  "
+        let transfer = try FormStore.createTransfer(draft, context: context)
+        XCTAssertEqual(transfer.sourceAmount, Decimal(string: "12.25")!)
+        XCTAssertEqual(transfer.destinationAmount, Decimal(string: "12.25")!)
+        XCTAssertEqual(transfer.note, "Cash withdrawal")
+        XCTAssertEqual(source.balance(including: [transfer]), Decimal(string: "87.75")!)
+        XCTAssertEqual(destination.balance(including: [transfer]), Decimal(string: "32.25")!)
+        for invalid in ["0", "-1", "12abc", "12 34", "1.000,50", "100"] {
+            draft.sourceAmount = invalid
+            XCTAssertThrowsError(try FormStore.createTransfer(draft, context: context), invalid)
+        }
+        draft.sourceAmount = "5"; draft.destinationWallet = source
+        XCTAssertThrowsError(try FormStore.createTransfer(draft, context: context))
+        XCTAssertEqual(try context.fetch(FetchDescriptor<WalletTransfer>()).count, 1)
+    }
+
+    @MainActor
+    func testCrossCurrencyTransferFailurePreservesDraftAndPriorIncomeThenRetryPersistsBothAmounts() throws {
+        let context = try backupContext()
+        let source = Wallet(name: "Euro", startingBalance: 100, currencyCode: "EUR", walletType: "Bank Account")
+        let destination = Wallet(name: "Forint", startingBalance: 2000, currencyCode: "HUF", walletType: "Cash")
+        context.insert(source); context.insert(destination); try context.save()
+        let income = ExpenseTransaction(amount: 10, isIncome: true, wallet: source)
+        context.insert(income)
+        var draft = TransferFormDraft(sourceWallet: source)
+        draft.destinationWallet = destination; draft.sourceAmount = "10,25"; draft.destinationAmount = "4 100,50"
+        draft.note = "  Exchange  "
+        context.autosaveEnabled = true
+        XCTAssertThrowsError(try FormStore.createTransfer(draft, context: context) { staged in
+            XCTAssertFalse(staged.autosaveEnabled)
+            throw CocoaError(.fileWriteOutOfSpace)
+        })
+        XCTAssertTrue(context.autosaveEnabled)
+        XCTAssertFalse(context.hasChanges)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<WalletTransfer>()).count, 0)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<ExpenseTransaction>()).count, 1)
+        XCTAssertEqual(source.balance(including: []), 110)
+        XCTAssertEqual(destination.balance(including: []), 2000)
+        XCTAssertEqual(draft.sourceAmount, "10,25")
+        XCTAssertEqual(draft.destinationAmount, "4 100,50")
+        let transfer = try FormStore.createTransfer(draft, context: context)
+        XCTAssertEqual(transfer.sourceCurrencyCode, "EUR")
+        XCTAssertEqual(transfer.destinationCurrencyCode, "HUF")
+        XCTAssertEqual(transfer.note, "Exchange")
+        XCTAssertEqual(source.balance(including: [transfer]), Decimal(string: "99.75")!)
+        XCTAssertEqual(destination.balance(including: [transfer]), Decimal(string: "6100.5")!)
+        let persisted = try ModelContext(context.container).fetch(FetchDescriptor<WalletTransfer>())
+        XCTAssertEqual(persisted.count, 1)
+        XCTAssertEqual(persisted.first?.destinationAmount, Decimal(string: "4100.5")!)
+        draft.destinationAmount = ""
+        XCTAssertThrowsError(try FormStore.createTransfer(draft, context: context))
+    }
+
+    @MainActor
+    func testTransferEditRestoresOriginalAmountForLimitsAndFailedSaveChangesNeitherWallet() throws {
+        let context = try backupContext()
+        let source = Wallet(name: "Euro", startingBalance: 100, currencyCode: "EUR", walletType: "Bank Account")
+        let destination = Wallet(name: "Forint", startingBalance: 1000, currencyCode: "HUF", walletType: "Cash")
+        context.insert(source); context.insert(destination)
+        let earlier = WalletTransfer(sourceAmount: 30, destinationAmount: 12000, sourceWallet: source, destinationWallet: destination)
+        let transfer = WalletTransfer(sourceAmount: 40, destinationAmount: 16000, note: "Original", sourceWallet: source, destinationWallet: destination)
+        context.insert(earlier); context.insert(transfer); try context.save()
+        var draft = TransferFormDraft(transfer: transfer)
+        draft.sourceAmount = "70"; draft.destinationAmount = "28 010,50"; draft.note = "Updated"
+        XCTAssertEqual(draft.availableAmount(transfers: [earlier, transfer], editing: transfer), 70)
+        XCTAssertThrowsError(try FormStore.updateTransfer(transfer, draft: draft, context: context) { _ in
+            throw CocoaError(.fileWriteOutOfSpace)
+        })
+        XCTAssertFalse(context.hasChanges)
+        XCTAssertEqual(transfer.sourceAmount, 40)
+        XCTAssertEqual(transfer.destinationAmount, 16000)
+        XCTAssertEqual(transfer.note, "Original")
+        XCTAssertEqual(source.balance(including: [earlier, transfer]), 30)
+        XCTAssertEqual(destination.balance(including: [earlier, transfer]), 29000)
+        XCTAssertEqual(draft.destinationAmount, "28 010,50")
+        try FormStore.updateTransfer(transfer, draft: draft, context: context)
+        XCTAssertEqual(source.balance(including: [earlier, transfer]), 0)
+        XCTAssertEqual(destination.balance(including: [earlier, transfer]), Decimal(string: "41010.5")!)
+        XCTAssertEqual(earlier.sourceAmount, 30)
+        draft.sourceAmount = "71"
+        XCTAssertThrowsError(try FormStore.updateTransfer(transfer, draft: draft, context: context))
+        draft.sourceAmount = "5"; draft.sourceWallet = destination
+        XCTAssertThrowsError(try FormStore.updateTransfer(transfer, draft: draft, context: context))
+        XCTAssertEqual(transfer.sourceWallet?.persistentModelID, source.persistentModelID)
+        XCTAssertEqual(transfer.sourceCurrencyCode, "EUR")
+        XCTAssertEqual(transfer.destinationCurrencyCode, "HUF")
+    }
+
+    @MainActor
+    func testTransferOverdraftLimitsAndFailedDeletionRestoreBothBalances() throws {
+        let context = try backupContext()
+        let source = Wallet(name: "Credit", startingBalance: -50, currencyCode: "EUR", walletType: "Credit Card",
+                            allowsNegativeBalance: true, negativeBalanceLimit: 100)
+        let destination = Wallet(name: "Cash", startingBalance: 0, currencyCode: "EUR", walletType: "Cash")
+        context.insert(source); context.insert(destination); try context.save()
+        var draft = TransferFormDraft(sourceWallet: source)
+        draft.destinationWallet = destination; draft.sourceAmount = "50"
+        let transfer = try FormStore.createTransfer(draft, context: context)
+        XCTAssertEqual(source.balance(including: [transfer]), -100)
+        XCTAssertEqual(destination.balance(including: [transfer]), 50)
+        draft.sourceAmount = "0.01"
+        XCTAssertThrowsError(try FormStore.createTransfer(draft, context: context))
+        XCTAssertThrowsError(try FormStore.deleteTransfer(transfer, context: context) { _ in
+            throw CocoaError(.fileWriteOutOfSpace)
+        })
+        let retained = try context.fetch(FetchDescriptor<WalletTransfer>())
+        XCTAssertEqual(retained.count, 1)
+        XCTAssertEqual(source.balance(including: retained), -100)
+        XCTAssertEqual(destination.balance(including: retained), 50)
+        try FormStore.deleteTransfer(transfer, context: context)
+        let deleted = try ModelContext(context.container).fetch(FetchDescriptor<WalletTransfer>())
+        XCTAssertTrue(deleted.isEmpty)
+        XCTAssertEqual(source.balance(including: deleted), -50)
+        XCTAssertEqual(destination.balance(including: deleted), 0)
+    }
+
+    @MainActor
+    func testTransferEditKeepsSavedCurrenciesWhenOriginalWalletIsMissing() throws {
+        let context = try backupContext()
+        let destination = Wallet(name: "Forint", startingBalance: 1000, currencyCode: "HUF", walletType: "Cash")
+        context.insert(destination)
+        let transfer = WalletTransfer(sourceAmount: 5, destinationAmount: 2000, date: date(2026, 10, 1), note: "History",
+                                      sourceWallet: nil, destinationWallet: destination, sourceCurrencyCode: "EUR",
+                                      destinationCurrencyCode: "HUF", createdAt: date(2026, 10, 1))
+        context.insert(transfer); try context.save()
+        var draft = TransferFormDraft(transfer: transfer)
+        draft.sourceAmount = "6,25"; draft.destinationAmount = "2500"; draft.note = "Corrected history"
+        try FormStore.updateTransfer(transfer, draft: draft, context: context)
+        XCTAssertNil(transfer.sourceWallet)
+        XCTAssertEqual(transfer.sourceCurrencyCode, "EUR")
+        XCTAssertEqual(transfer.destinationCurrencyCode, "HUF")
+        XCTAssertEqual(transfer.sourceAmount, Decimal(string: "6.25")!)
+        XCTAssertEqual(destination.balance(including: [transfer]), 3500)
+        XCTAssertEqual(transfer.createdAt, date(2026, 10, 1))
+    }
+
+    @MainActor
     private var backupSchema: Schema {
         Schema([Item.self, Wallet.self, ExpenseTransaction.self, SpendingCategory.self,
                 SpendingSubcategory.self, Budget.self, WalletTransfer.self, RecurringPayment.self])

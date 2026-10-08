@@ -59,6 +59,7 @@
 		2902FA9AC02A670ACA728B51 /* FormFields.swift in Sources */ = {isa = PBXBuildFile; fileRef = A85F0D5B5A0D1D0991090CA4 /* FormFields.swift */; };
 		592AAE774823538640238A0A /* TransactionFormFields.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80C395EE7911C525727D320C /* TransactionFormFields.swift */; };
 		C4D4EB046B32BEB266FE6DED /* RecurringSchedule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CE8918EE48493812E2043D9 /* RecurringSchedule.swift */; };
+		DD361344C34FA8291E6471FA /* TransferFormFields.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12CD5E4C4FAFDCB6ED8F14DA /* TransferFormFields.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -136,6 +137,7 @@
 		A85F0D5B5A0D1D0991090CA4 /* FormFields.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormFields.swift; sourceTree = "<group>"; };
 		80C395EE7911C525727D320C /* TransactionFormFields.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionFormFields.swift; sourceTree = "<group>"; };
 		3CE8918EE48493812E2043D9 /* RecurringSchedule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurringSchedule.swift; sourceTree = "<group>"; };
+		12CD5E4C4FAFDCB6ED8F14DA /* TransferFormFields.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferFormFields.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -222,6 +224,7 @@
 				A85F0D5B5A0D1D0991090CA4 /* FormFields.swift */,
 				80C395EE7911C525727D320C /* TransactionFormFields.swift */,
 				3CE8918EE48493812E2043D9 /* RecurringSchedule.swift */,
+				12CD5E4C4FAFDCB6ED8F14DA /* TransferFormFields.swift */,
 				86E929B6305D850700AF8F5C /* SettingsView.swift */,
 				86E929B7305D850700AF8F5C /* SpendingCategory.swift */,
 				86E929B8305D850700AF8F5C /* SpendingSubcategory.swift */,
@@ -432,6 +435,7 @@
 				2902FA9AC02A670ACA728B51 /* FormFields.swift in Sources */,
 				592AAE774823538640238A0A /* TransactionFormFields.swift in Sources */,
 				C4D4EB046B32BEB266FE6DED /* RecurringSchedule.swift in Sources */,
+				DD361344C34FA8291E6471FA /* TransferFormFields.swift in Sources */,
 				DFBA2814FFBEE2FFA7166EB9 /* SettingsView.swift in Sources */,
 				AE303135B425D7B2F2E393F3 /* SpendingCategory.swift in Sources */,
 				17EDA502EA16BFF71E5FE3EE /* SpendingSubcategory.swift in Sources */,
