@@ -14,7 +14,7 @@ struct PaymentReminderOptions: View {
     @State private var requestingPermission = false
 
     var body: some View {
-        Section("Reminder") {
+        Section {
             Picker("Remind Me", selection: $settings.daysBefore) {
                 ForEach(ReminderPreferences.allowedLeadDays, id: \.self) { days in
                     Text(days == 0 ? "On the due date" : (days == 1 ? "1 day before" : "\(days) days before")).tag(days)
@@ -54,6 +54,8 @@ struct PaymentReminderOptions: View {
                 Text("The nearest payments are scheduled first. Open the app as payments become due to refresh later reminders.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+        } header: {
+            Text("Reminder")
         } footer: {
             Text("\(settings.timingDescription) at \(timeText), using your device’s local time. A postponement moves this reminder too. Tap the notification to open this payment and confirm Paid.")
                 .accessibilityIdentifier("recurringReminderTimingSummary")
