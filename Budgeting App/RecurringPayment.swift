@@ -22,6 +22,13 @@ final class RecurringPayment {
 
     var createdAt: Date
 
+    // Defaults support existing stores and keep each payment opted out until
+    // its own Reminder toggle is enabled.
+    var reminderEnabled: Bool = false
+    var reminderDaysBefore: Int = 0
+    var reminderHour: Int = 9
+    var reminderMinute: Int = 0
+
     init(
         name: String,
         amount: Decimal,
@@ -31,7 +38,8 @@ final class RecurringPayment {
         isActive: Bool = true,
         wallet: Wallet? = nil,
         category: SpendingCategory? = nil,
-        subcategory: SpendingSubcategory? = nil
+        subcategory: SpendingSubcategory? = nil,
+        reminder: ReminderPreferences = ReminderPreferences()
     ) {
         self.name = name
         self.amount = amount
@@ -48,6 +56,23 @@ final class RecurringPayment {
         self.subcategory = subcategory
 
         self.createdAt = Date()
+        self.reminderEnabled = reminder.isEnabled
+        self.reminderDaysBefore = reminder.daysBefore
+        self.reminderHour = reminder.hour
+        self.reminderMinute = reminder.minute
+    }
+
+    var reminderPreferences: ReminderPreferences {
+        get {
+            ReminderPreferences(isEnabled: reminderEnabled, daysBefore: reminderDaysBefore,
+                                hour: reminderHour, minute: reminderMinute)
+        }
+        set {
+            reminderEnabled = newValue.isEnabled
+            reminderDaysBefore = newValue.daysBefore
+            reminderHour = newValue.hour
+            reminderMinute = newValue.minute
+        }
     }
 
     var nextPaymentDate: Date {

@@ -212,7 +212,7 @@ extension FormStore {
             let payment = RecurringPayment(name: draft.cleanedName, amount: total, frequency: draft.frequency,
                                            nextPaymentDate: draft.scheduledDate, note: draft.details.cleanedNote,
                                            wallet: draft.details.selectedWallet, category: draft.details.selectedCategory,
-                                           subcategory: draft.details.subcategory)
+                                           subcategory: draft.details.subcategory, reminder: draft.reminder)
             context.insert(payment)
             return payment
         }
@@ -232,6 +232,7 @@ extension FormStore {
             payment.wallet = draft.details.selectedWallet
             payment.category = draft.details.selectedCategory
             payment.subcategory = draft.details.subcategory
+            payment.reminderPreferences = draft.reminder
             if !Calendar.current.isDate(previousDate, inSameDayAs: draft.scheduledDate) {
                 payment.postponedUntil = nil
             }
@@ -265,6 +266,12 @@ extension FormStore {
     static func setRecurringPaymentActive(_ payment: RecurringPayment, active: Bool, context: ModelContext,
                                           commit: (ModelContext) throws -> Void = { try $0.save() }) throws {
         try perform(context: context, commit: commit) { payment.isActive = active }
+    }
+
+    static func setRecurringReminder(_ payment: RecurringPayment, preferences: ReminderPreferences, context: ModelContext,
+                                     commit: (ModelContext) throws -> Void = { try $0.save() }) throws {
+        guard preferences.isValid else { throw SaveError.invalidFields }
+        try perform(context: context, commit: commit) { payment.reminderPreferences = preferences }
     }
 
     static func postponeRecurringPayment(_ payment: RecurringPayment, until date: Date, context: ModelContext,

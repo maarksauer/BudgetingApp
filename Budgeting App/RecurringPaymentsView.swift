@@ -26,8 +26,6 @@ struct RecurringPaymentsView: View {
     var body: some View {
 
         List {
-            RecurringReminderSettings()
-
             if payments.isEmpty {
                 Section {
                     emptyState

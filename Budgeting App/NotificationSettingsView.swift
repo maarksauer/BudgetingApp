@@ -6,119 +6,85 @@ import UIKit
 import AppKit
 #endif
 
-struct RecurringReminderSettings: View {
+struct PaymentReminderOptions: View {
+    @Binding var settings: ReminderPreferences
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
-    @AppStorage(ReminderPreferences.storageKey) private var storedPreferences = ReminderPreferences().storageValue
     @ObservedObject private var manager = NotificationManager.shared
-    @State private var enabling = false
-    @State private var isExpanded = false
-    private var preferences: ReminderPreferences { ReminderPreferences.decode(storedPreferences) }
+    @State private var requestingPermission = false
 
     var body: some View {
-        Section {
-            DisclosureGroup(isExpanded: $isExpanded) {
-                Toggle("Payment Reminders", isOn: Binding(
-                    get: { preferences.isEnabled },
-                    set: { value in var settings = preferences; settings.isEnabled = value; storedPreferences = settings.storageValue }
-                ))
-                .disabled(manager.permission != .allowed || enabling)
-                .accessibilityIdentifier("recurringRemindersEnabled")
-
-                if manager.permission == .notDetermined {
-                    Button("Enable Notifications", action: enable)
-                        .disabled(enabling).accessibilityIdentifier("enableRecurringNotifications")
-                } else if manager.permission == .denied {
-                    Text("Notifications are disabled in your device settings.").foregroundStyle(.secondary)
-                    Button("Open Notification Settings", action: openSystemSettings)
-                        .accessibilityIdentifier("openSystemNotificationSettings")
-                } else if manager.permission == .unknown {
-                    Button("Check Notification Status") { manager.refreshNotifications(context: modelContext) }
-                }
-
-                Picker("Remind Me", selection: Binding(
-                    get: { preferences.daysBefore },
-                    set: { value in var settings = preferences; settings.daysBefore = value; storedPreferences = settings.storageValue }
-                )) {
-                    ForEach(ReminderPreferences.allowedLeadDays, id: \.self) { days in
-                        Text(days == 0 ? "On the due date" : (days == 1 ? "1 day before" : "\(days) days before")).tag(days)
-                    }
-                }
-                .pickerStyle(.menu).accessibilityIdentifier("recurringReminderLeadDays")
-
-                DatePicker("Time", selection: Binding(
-                    get: { Calendar.current.date(bySettingHour: preferences.hour, minute: preferences.minute, second: 0, of: Date()) ?? Date() },
-                    set: { date in
-                        var settings = preferences
-                        settings.hour = Calendar.current.component(.hour, from: date)
-                        settings.minute = Calendar.current.component(.minute, from: date)
-                        storedPreferences = settings.storageValue
-                    }
-                ), displayedComponents: .hourAndMinute)
-                .accessibilityIdentifier("recurringReminderTime")
-
-                Text("\(preferences.timingDescription) at \(timeText), using your device’s local time. Applies to all active recurring payments; postponed payments use their postponed due date.")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .accessibilityIdentifier("recurringReminderTimingSummary")
-                Text("Tap a reminder to open the payment and confirm Paid. Reminders never record payments automatically.")
-                    .font(.caption).foregroundStyle(.secondary)
-
-                if manager.permission == .allowed && preferences.isEnabled {
-                    ReadableDetailRow(title: "Pending Reminders", value: "\(manager.scheduledCount)")
-                    if manager.waitingCount > 0 {
-                        Text("\(manager.waitingCount) later reminders are waiting. The nearest payments are scheduled first; open the app as payments become due to refresh the queue.")
-                            .font(.subheadline).foregroundStyle(.secondary)
-                    }
-                    Button("Refresh Reminders") { manager.refreshNotifications(context: modelContext) }
-                        .accessibilityIdentifier("refreshRecurringNotifications")
-                }
-                if let error = manager.lastError {
-                    Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
-                    Button("Try Again") { manager.refreshNotifications(context: modelContext) }
-                }
-            } label: {
-                AdaptiveValueRow {
-                    Label("Reminders", systemImage: "bell")
-                } trailing: {
-                    Text(statusText).foregroundStyle(.secondary)
-                        .accessibilityIdentifier("reminderAuthorizationStatus")
+        Section("Reminder") {
+            Picker("Remind Me", selection: $settings.daysBefore) {
+                ForEach(ReminderPreferences.allowedLeadDays, id: \.self) { days in
+                    Text(days == 0 ? "On the due date" : (days == 1 ? "1 day before" : "\(days) days before")).tag(days)
                 }
             }
-            .accessibilityIdentifier("recurringReminderSettings")
+            .pickerStyle(.menu).accessibilityIdentifier("recurringReminderLeadDays")
+
+            DatePicker("Time", selection: Binding(
+                get: { Calendar.current.date(bySettingHour: settings.hour, minute: settings.minute, second: 0, of: Date()) ?? Date() },
+                set: { date in
+                    var updated = settings
+                    updated.hour = Calendar.current.component(.hour, from: date)
+                    updated.minute = Calendar.current.component(.minute, from: date)
+                    settings = updated
+                }
+            ), displayedComponents: .hourAndMinute)
+            .accessibilityIdentifier("recurringReminderTime")
+
+            ReadableDetailRow(title: "Notifications", value: permissionText)
+                .accessibilityIdentifier("reminderAuthorizationStatus")
+            if manager.permission == .notDetermined {
+                Button("Enable Notifications", action: enableNotifications)
+                    .disabled(requestingPermission).accessibilityIdentifier("enableRecurringNotifications")
+            } else if manager.permission == .denied {
+                Text("Allow notifications in your device settings to receive this reminder.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Button("Open Notification Settings", action: openSystemSettings)
+                    .accessibilityIdentifier("openSystemNotificationSettings")
+            } else if manager.permission == .unknown {
+                Button("Check Notification Status") { checkPermission() }
+            }
+            if let error = manager.lastError {
+                Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+                Button("Try Again") { manager.refreshNotifications(context: modelContext) }
+            }
+            if manager.waitingCount > 0 {
+                Text("The nearest payments are scheduled first. Open the app as payments become due to refresh later reminders.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        } footer: {
+            Text("\(settings.timingDescription) at \(timeText), using your device’s local time. A postponement moves this reminder too. Tap the notification to open this payment and confirm Paid.")
+                .accessibilityIdentifier("recurringReminderTimingSummary")
         }
-        .task {
-            if manager.lastError != nil { isExpanded = true }
-            manager.refreshNotifications(context: modelContext)
-        }
-        .onChange(of: storedPreferences) { _, _ in manager.refreshNotifications(context: modelContext) }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active { manager.refreshNotifications(context: modelContext) }
-        }
-        .onChange(of: manager.lastError) { _, error in
-            if error != nil { isExpanded = true }
-        }
+        .task { _ = await manager.authorizationStatus() }
+        .onChange(of: scenePhase) { _, phase in if phase == .active { checkPermission() } }
     }
 
     private var timeText: String {
-        (Calendar.current.date(bySettingHour: preferences.hour, minute: preferences.minute, second: 0, of: Date()) ?? Date())
+        (Calendar.current.date(bySettingHour: settings.hour, minute: settings.minute, second: 0, of: Date()) ?? Date())
             .formatted(date: .omitted, time: .shortened)
     }
-    private var statusText: String {
+    private var permissionText: String {
         switch manager.permission {
-        case .allowed: return preferences.isEnabled ? "On" : "Off"
-        case .denied: return "Off"
-        case .notDetermined: return "Not Enabled"
-        case .unknown: return "Unknown"
+        case .allowed: "Enabled"
+        case .denied: "Off in Device Settings"
+        case .notDetermined: "Not Enabled"
+        case .unknown: "Unknown"
         }
     }
-    private func enable() {
-        enabling = true
+    private func checkPermission() {
         Task { @MainActor in
-            if await manager.requestPermission() {
-                var settings = preferences; settings.isEnabled = true; storedPreferences = settings.storageValue
-                manager.refreshNotifications(context: modelContext)
-            }
-            enabling = false
+            _ = await manager.authorizationStatus()
+            manager.refreshNotifications(context: modelContext)
+        }
+    }
+    private func enableNotifications() {
+        requestingPermission = true
+        Task { @MainActor in
+            if await manager.requestPermission() { manager.refreshNotifications(context: modelContext) }
+            requestingPermission = false
         }
     }
     private func openSystemSettings() {

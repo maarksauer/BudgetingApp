@@ -5,7 +5,7 @@ import SwiftData
 // the file boundary; IDs below link records within this particular backup.
 nonisolated enum AppBackup {
     static let format = "BudgetingAppBackup"
-    static let version = 2
+    static let version = 3
     static let maximumBytes = 32 * 1024 * 1024
     static let maximumRecords = 100_000
     static let restoreRevisionKey = "dataRestoreRevision"
@@ -97,6 +97,8 @@ nonisolated enum AppBackup {
         var categoryID: UUID?
         var subcategoryID: UUID?
         var createdAt: Date
+        // Versions 1 and 2 omit this field and restore reminders as Off.
+        var reminder: ReminderPreferences? = nil
     }
 
     nonisolated struct TransactionRecord: Codable, Sendable, Identifiable {
@@ -217,6 +219,12 @@ nonisolated enum AppBackup {
             for id in record.categoryIDs { try reference(id, in: categories) }
         }
         for record in snapshot.recurringPayments {
+            if snapshot.version >= 3 && record.reminder == nil {
+                throw BackupError.invalid("A recurring payment is missing its reminder settings.")
+            }
+            if let reminder = record.reminder, !reminder.isValid {
+                throw BackupError.invalid("A recurring payment has invalid reminder timing.")
+            }
             try nonnegative(record.amount)
             try reference(record.walletID, in: wallets)
             try reference(record.categoryID, in: categories)
@@ -360,7 +368,8 @@ enum BackupStore {
                     amount: amount(payment.amount), frequency: payment.frequency, scheduledPaymentDate: payment.scheduledPaymentDate,
                     postponedUntil: payment.postponedUntil, note: payment.note, isActive: payment.isActive,
                     walletID: try id(payment.wallet, in: walletIDs), categoryID: try id(payment.category, in: categoryIDs),
-                    subcategoryID: try id(payment.subcategory, in: subcategoryIDs), createdAt: payment.createdAt)
+                    subcategoryID: try id(payment.subcategory, in: subcategoryIDs), createdAt: payment.createdAt,
+                    reminder: payment.reminderPreferences)
             },
             transactions: transactions.map { transaction in
                 AppBackup.TransactionRecord(id: UUID(), isIncome: transaction.isIncome, amount: amount(transaction.amount),
@@ -461,7 +470,8 @@ enum BackupStore {
             let model = try RecurringPayment(name: record.name, amount: AppBackup.decimal(record.amount),
                 frequency: record.frequency, nextPaymentDate: record.scheduledPaymentDate, note: record.note,
                 isActive: record.isActive, wallet: record.walletID.flatMap { wallets[$0] },
-                category: record.categoryID.flatMap { categories[$0] }, subcategory: record.subcategoryID.flatMap { subcategories[$0] })
+                category: record.categoryID.flatMap { categories[$0] }, subcategory: record.subcategoryID.flatMap { subcategories[$0] },
+                reminder: record.reminder ?? ReminderPreferences())
             model.createdAt = record.createdAt
             model.postponedUntil = record.postponedUntil
             context.insert(model)

@@ -142,7 +142,7 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
     }
 
     func dueNotificationDate(for payment: RecurringPayment) -> Date? {
-        guard let specification = ReminderPlanner.specification(for: RecurringReminderSnapshot(payment: payment), preferences: ReminderPreferences.load(defaults: defaults)) else { return nil }
+        guard let specification = ReminderPlanner.specification(for: RecurringReminderSnapshot(payment: payment)) else { return nil }
         return ReminderPlanner.fireDate(for: specification, now: now())
     }
 
@@ -190,7 +190,6 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
     func waitForRefresh() async { await worker?.value }
 
     private func reconcile(values: [RecurringReminderSnapshot], revision current: Int) async {
-        let preferences = ReminderPreferences.load(defaults: defaults)
         let status = await client.authorizationStatus()
         guard revision == current else { return }
         permission = status
@@ -198,7 +197,7 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
         let delivered = await client.delivered()
         guard revision == current else { return }
         let specifications = status == .allowed
-            ? values.compactMap { ReminderPlanner.specification(for: $0, preferences: preferences) } : []
+            ? values.compactMap { ReminderPlanner.specification(for: $0) } : []
         let desired = Dictionary(specifications.map { ($0.paymentKey, $0) }, uniquingKeysWith: { _, last in last })
         let ownPending = pending.filter { $0.identifier.hasPrefix(ReminderIdentity.prefix) }
         let ownDelivered = delivered.filter { $0.identifier.hasPrefix(ReminderIdentity.prefix) }
@@ -279,11 +278,9 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
         let occurrence = notification.request.content.userInfo["occurrenceKey"] as? String
         let fingerprint = notification.request.content.userInfo["fingerprint"] as? String
         return await MainActor.run {
-            let preferences = ReminderPreferences.load(defaults: self.defaults)
-            guard preferences.isEnabled,
-                  let key, let payment = self.snapshots[key], payment.isActive,
+            guard let key, let payment = self.snapshots[key], payment.isActive, payment.reminder.isEnabled,
                   payment.occurrenceKey == occurrence,
-                  ReminderPlanner.specification(for: payment, preferences: preferences)?.fingerprint == fingerprint else { return [] }
+                  ReminderPlanner.specification(for: payment)?.fingerprint == fingerprint else { return [] }
             return [.banner, .list, .sound]
         }
     }

@@ -55,11 +55,12 @@ struct RecurringPaymentFormDraft {
     var details = ExpenseDraft()
     var frequency = "Monthly"
     var scheduledDate = Date()
+    var reminder = ReminderPreferences()
 
     var cleanedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
     var canSave: Bool {
         !cleanedName.isEmpty && details.hasRequiredFields && !details.isIncome &&
-        RecurringSchedule.frequencies.contains(frequency) && scheduledDate.timeIntervalSinceReferenceDate.isFinite
+        RecurringSchedule.frequencies.contains(frequency) && scheduledDate.timeIntervalSinceReferenceDate.isFinite && reminder.isValid
     }
 
     init() { }
@@ -72,6 +73,7 @@ struct RecurringPaymentFormDraft {
         details.selectedSubcategoryID = payment.subcategory?.persistentModelID
         frequency = payment.frequency
         scheduledDate = payment.scheduledPaymentDate
+        reminder = payment.reminderPreferences
     }
 }
 
@@ -240,8 +242,13 @@ struct RecurringPaymentFormFields: View {
                 DatePicker("First Payment", selection: $draft.scheduledDate,
                            in: Calendar.current.startOfDay(for: Date())..., displayedComponents: .date)
             }
+            Toggle("Reminder", isOn: $draft.reminder.isEnabled)
+                .accessibilityIdentifier("recurringFormReminderEnabled")
             Label("Payments are recorded only when you confirm they were made.", systemImage: "info.circle")
                 .font(.caption).foregroundStyle(.secondary)
+        }
+        if draft.reminder.isEnabled {
+            PaymentReminderOptions(settings: $draft.reminder)
         }
         TransactionSelectionSections(draft: $draft.details, wallets: wallets, categories: categories, prefix: "recurringForm")
         Section("Note") {

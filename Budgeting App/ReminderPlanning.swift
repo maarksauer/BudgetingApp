@@ -2,25 +2,14 @@ import Foundation
 import SwiftData
 
 nonisolated struct ReminderPreferences: Codable, Equatable, Sendable {
-    static let storageKey = "recurringReminderPreferences"
     static let allowedLeadDays = [0, 1, 2, 3, 7]
     var isEnabled = false
     var daysBefore = 0
     var hour = 9
     var minute = 0
 
-    static func load(defaults: UserDefaults = .standard) -> Self {
-        decode(defaults.string(forKey: storageKey) ?? "")
-    }
-    static func decode(_ text: String) -> Self {
-        guard let data = text.data(using: .utf8),
-              let result = try? JSONDecoder().decode(Self.self, from: data),
-              allowedLeadDays.contains(result.daysBefore), (0...23).contains(result.hour), (0...59).contains(result.minute)
-        else { return Self() }
-        return result
-    }
-    var storageValue: String {
-        String(data: (try? JSONEncoder().encode(self)) ?? Data(), encoding: .utf8) ?? ""
+    var isValid: Bool {
+        Self.allowedLeadDays.contains(daysBefore) && (0...23).contains(hour) && (0...59).contains(minute)
     }
     var timingDescription: String {
         daysBefore == 0 ? "On the due date" : (daysBefore == 1 ? "1 day before" : "\(daysBefore) days before")
@@ -35,7 +24,7 @@ nonisolated enum ReminderIdentity {
     static let prefix = "budgeting.recurring."
     static func paymentKey(createdAt: Date, modelID: String) -> String {
         // Creation time is the base; the saved model identity disambiguates equal
-        // timestamps without changing existing SwiftData models or backup format.
+        // timestamps, including after reopening the saved store.
         prefix + String(createdAt.timeIntervalSinceReferenceDate.bitPattern, radix: 16) + "." + component(modelID)
     }
     static func component(_ string: String) -> String { Data(string.utf8).base64EncodedString() }
@@ -50,6 +39,7 @@ nonisolated struct RecurringReminderSnapshot: Equatable, Sendable {
     let scheduledDate: Date
     let effectiveDueDate: Date
     let isActive: Bool
+    var reminder: ReminderPreferences = ReminderPreferences()
     var occurrenceKey: String { ReminderIdentity.dateKey(scheduledDate) + "." + ReminderIdentity.dateKey(effectiveDueDate) }
 }
 
@@ -62,7 +52,8 @@ extension RecurringReminderSnapshot {
             .flatMap { String(data: $0, encoding: .utf8) } ?? String(describing: payment.persistentModelID)
         self.init(paymentKey: ReminderIdentity.paymentKey(createdAt: payment.createdAt, modelID: modelID),
                   name: payment.name, amountText: payment.amount.formatted(.number), currency: payment.wallet?.currencyCode ?? "",
-                  scheduledDate: payment.scheduledPaymentDate, effectiveDueDate: payment.nextPaymentDate, isActive: payment.isActive)
+                  scheduledDate: payment.scheduledPaymentDate, effectiveDueDate: payment.nextPaymentDate, isActive: payment.isActive,
+                  reminder: payment.reminderPreferences)
     }
 }
 
@@ -79,12 +70,12 @@ nonisolated struct ReminderSpecification: Equatable, Sendable {
 }
 
 nonisolated enum ReminderPlanner {
-    static func specification(for payment: RecurringReminderSnapshot, preferences: ReminderPreferences,
+    static func specification(for payment: RecurringReminderSnapshot, preferences override: ReminderPreferences? = nil,
                               calendar: Calendar = .current) -> ReminderSpecification? {
+        let preferences = override ?? payment.reminder
         guard payment.isActive, preferences.isEnabled,
               payment.effectiveDueDate.timeIntervalSinceReferenceDate.isFinite,
-              ReminderPreferences.allowedLeadDays.contains(preferences.daysBefore),
-              (0...23).contains(preferences.hour), (0...59).contains(preferences.minute),
+              preferences.isValid,
               let day = calendar.date(byAdding: .day, value: -preferences.daysBefore, to: calendar.startOfDay(for: payment.effectiveDueDate)),
               let fire = calendar.date(bySettingHour: preferences.hour, minute: preferences.minute, second: 0, of: day)
         else { return nil }

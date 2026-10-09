@@ -42,7 +42,6 @@ struct MainTabView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var notificationManager = NotificationManager.shared
-    @AppStorage(ReminderPreferences.storageKey) private var reminderPreferences = ReminderPreferences().storageValue
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var selectedTab: AppTab = .add
     @State private var expenseDraft = ExpenseDraft()
@@ -98,7 +97,6 @@ struct MainTabView: View {
             openReminderIfNeeded()
         }
         .onChange(of: notificationManager.openRequest) { _, _ in openReminderIfNeeded() }
-        .onChange(of: reminderPreferences) { _, _ in notificationManager.refreshNotifications(context: modelContext) }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { notificationManager.refreshNotifications(context: modelContext); openReminderIfNeeded() }
         }

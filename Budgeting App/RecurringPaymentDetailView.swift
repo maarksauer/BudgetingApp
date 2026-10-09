@@ -53,6 +53,16 @@ struct RecurringPaymentDetailView: View {
                 }
                 summary
                 schedule
+                if payment.reminderEnabled {
+                    PaymentReminderOptions(settings: reminderBinding)
+                        .disabled(isSaving)
+                    if !payment.isActive {
+                        Section {
+                            Text("This payment is paused. Its reminder will resume when you resume the payment.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
                 Section("Details") {
                     ReadableDetailRow(title: "Wallet", value: payment.wallet?.name ?? "None")
                     ReadableDetailRow(title: "Category", value: payment.category?.name ?? "None")
@@ -181,7 +191,23 @@ struct RecurringPaymentDetailView: View {
             } else {
                 ReadableDetailRow(title: payment.isDue ? "Due" : "Next Payment", value: payment.nextPaymentDate.formatted(date: .long, time: .omitted))
             }
+            Toggle("Reminder", isOn: Binding(
+                get: { payment.reminderEnabled },
+                set: { enabled in
+                    var settings = payment.reminderPreferences
+                    settings.isEnabled = enabled
+                    reminderBinding.wrappedValue = settings
+                }
+            ))
+            .disabled(isSaving)
+            .accessibilityIdentifier("recurringPaymentReminderEnabled")
         }
+    }
+
+    private var reminderBinding: Binding<ReminderPreferences> {
+        Binding(get: { payment.reminderPreferences }, set: { settings in
+            perform { try FormStore.setRecurringReminder(payment, preferences: settings, context: modelContext) }
+        })
     }
 
     private var currentActions: some View {

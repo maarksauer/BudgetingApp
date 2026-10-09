@@ -3,33 +3,72 @@ import Foundation
 
 final class BudgetingAppUITests: XCTestCase {
     @MainActor
-    func testRecurringReminderControlsAreBuiltInAndPersistWithoutRequestingPermission() {
+    func testReminderScheduleToggleRevealsPerPaymentOptionsAndPreservesOnlySavedEdits() {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launch()
+        let wallet = createFormTestWallet(in: app)
         app.buttons["tabMore"].tap()
         XCTAssertFalse(app.buttons["openNotificationsSettings"].exists)
-        let open = app.buttons["openRecurringPayments"].firstMatch
-        scrollToFormElement(open, in: app); open.tap()
-        XCTAssertTrue(app.navigationBars["Recurring Payments"].waitForExistence(timeout: 5))
-        let reminders = app.buttons["recurringReminderSettings"].firstMatch
-        XCTAssertTrue(reminders.waitForExistence(timeout: 5))
+        app.buttons["openRecurringPayments"].tap()
+        XCTAssertFalse(app.buttons["recurringReminderSettings"].exists)
+        app.buttons["openCreateRecurringPayment"].tap()
+        let toggle = app.switches["recurringFormReminderEnabled"]
+        scrollToFormElement(toggle, in: app)
+        XCTAssertEqual(toggle.value as? String, "0")
         let lead = app.buttons["recurringReminderLeadDays"]
-        if !lead.exists { reminders.tap() }
-        XCTAssertTrue(app.switches["recurringRemindersEnabled"].exists)
+        XCTAssertFalse(lead.exists)
+        toggle.tap()
         scrollToFormElement(lead, in: app); lead.tap()
         app.buttons["3 days before"].tap()
-        let explanation = app.staticTexts["recurringReminderTimingSummary"]
-        XCTAssertTrue(explanation.waitForExistence(timeout: 5))
-        XCTAssertTrue(explanation.label.hasPrefix("3 days before at "))
         XCTAssertTrue(app.descendants(matching: .any)["recurringReminderTime"].firstMatch.exists)
-        app.navigationBars["Recurring Payments"].buttons["More"].tap()
-        scrollToFormElement(open, in: app); open.tap()
-        if !lead.exists { reminders.tap() }
-        XCTAssertTrue(explanation.waitForExistence(timeout: 5))
+        scrollToFormElement(toggle, in: app, upward: false); toggle.tap()
+        XCTAssertFalse(lead.exists)
+        toggle.tap()
+        let explanation = app.staticTexts["recurringReminderTimingSummary"]
+        scrollToFormElement(explanation, in: app)
         XCTAssertTrue(explanation.label.hasPrefix("3 days before at "))
-        lead.tap(); app.buttons["On the due date"].tap()
         XCTAssertFalse(app.alerts.firstMatch.exists)
+        let paymentName = "UI reminder \(UUID().uuidString.prefix(8))"
+        let name = app.textFields["recurringFormName"]
+        scrollToFormElement(name, in: app, upward: false)
+        name.tap(); name.typeText(paymentName + "\n")
+        let amount = app.textFields["recurringFormAmount"]
+        amount.typeText("5")
+        app.buttons["recurringFormKeyboardDone"].tap()
+        chooseFormWallet(wallet, prefix: "recurringForm", in: app)
+        XCTAssertTrue(app.buttons["createRecurringPayment"].isEnabled)
+        app.buttons["createRecurringPayment"].tap()
+        let row = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", paymentName)).firstMatch
+        scrollToFormElement(row, in: app); row.tap()
+        let savedToggle = app.switches["recurringPaymentReminderEnabled"]
+        scrollToFormElement(savedToggle, in: app)
+        XCTAssertEqual(savedToggle.value as? String, "1")
+        scrollToFormElement(explanation, in: app)
+        XCTAssertTrue(explanation.label.hasPrefix("3 days before at "))
+        app.buttons["editRecurringPayment"].tap()
+        scrollToFormElement(toggle, in: app, upward: false)
+        XCTAssertEqual(toggle.value as? String, "1")
+        toggle.tap(); XCTAssertFalse(lead.exists)
+        app.buttons["cancelRecurringForm"].tap()
+        scrollToFormElement(savedToggle, in: app, upward: false)
+        XCTAssertEqual(savedToggle.value as? String, "1")
+        app.buttons["editRecurringPayment"].tap()
+        scrollToFormElement(toggle, in: app, upward: false); toggle.tap()
+        app.buttons["saveRecurringPaymentEdit"].tap()
+        scrollToFormElement(savedToggle, in: app, upward: false)
+        XCTAssertEqual(savedToggle.value as? String, "0")
+        XCTAssertFalse(lead.exists)
+        savedToggle.tap()
+        scrollToFormElement(explanation, in: app)
+        XCTAssertTrue(explanation.label.hasPrefix("3 days before at "))
+        scrollToFormElement(savedToggle, in: app, upward: false); savedToggle.tap()
+        app.navigationBars[paymentName].buttons["Recurring Payments"].tap()
+        app.buttons["openCreateRecurringPayment"].tap()
+        scrollToFormElement(toggle, in: app)
+        XCTAssertEqual(toggle.value as? String, "0")
+        XCTAssertFalse(lead.exists)
+        app.buttons["cancelRecurringForm"].tap()
     }
 
     @MainActor
