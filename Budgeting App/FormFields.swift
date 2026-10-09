@@ -252,7 +252,8 @@ struct BudgetFormFields: View {
     }
 }
 
-// Keep labels and values readable when text grows or the available width shrinks.
+// Use intrinsic-height stacks inside List/Form rows. Measuring native Labels
+// with ViewThatFits can produce expanded rows and omit their visible titles.
 struct AdaptiveValueRow<Leading: View, Trailing: View>: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let leading: Leading
@@ -266,26 +267,27 @@ struct AdaptiveValueRow<Leading: View, Trailing: View>: View {
     var body: some View {
         Group {
             if dynamicTypeSize.isAccessibilitySize {
-                stacked
+                VStack(alignment: .leading, spacing: 8) {
+                    leading
+                    trailing
+                }
+                .multilineTextAlignment(.leading)
             } else {
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .firstTextBaseline, spacing: 12) {
-                        leading.fixedSize(horizontal: true, vertical: false)
-                        Spacer(minLength: 8)
-                        trailing.fixedSize(horizontal: true, vertical: false)
-                    }
-                    stacked
+                HStack(alignment: .top, spacing: 12) {
+                    leading
+                        .fixedSize(horizontal: false, vertical: true)
+                        .layoutPriority(1)
+                    Spacer(minLength: 8)
+                    trailing
+                        .fixedSize(horizontal: false, vertical: true)
+                        .multilineTextAlignment(.trailing)
                 }
             }
         }
+        // List's automatic label styling must not turn these labels into icons.
+        .labelStyle(.titleAndIcon)
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var stacked: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            leading
-            trailing
-        }
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 

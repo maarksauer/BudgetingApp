@@ -319,7 +319,7 @@ enum TransactionActivityList {
             .sorted { $0.date > $1.date }
     }
 
-    private static func normalized(_ text: String) -> String {
+    private nonisolated static func normalized(_ text: String) -> String {
         text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
             .replacingOccurrences(of: ",", with: ".")
     }

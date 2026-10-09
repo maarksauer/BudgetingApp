@@ -629,6 +629,34 @@ final class BudgetingAppUITests: XCTestCase {
     }
 
     @MainActor
+    func testWalletAndMoreSummaryRowsKeepLabelsAndCompactHeightInDarkMode() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL", "-appAppearance", "dark"]
+        app.launch()
+        let name = createFormTestWallet(in: app)
+        let wallet = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", name)).firstMatch
+        XCTAssertTrue(wallet.waitForExistence(timeout: 5))
+        scrollToFormElement(wallet, in: app)
+        XCTAssertTrue(wallet.label.contains(name))
+        XCTAssertLessThan(wallet.frame.height, 120, "A normal wallet row must not stretch into a large blank card.")
+        wallet.tap()
+        XCTAssertTrue(app.navigationBars[name].waitForExistence(timeout: 5))
+        app.buttons["tabMore"].tap()
+        let currencies = app.buttons["openCurrenciesSettings"]
+        scrollToFormElement(currencies, in: app)
+        XCTAssertTrue(currencies.label.contains("Currencies"))
+        XCTAssertLessThan(currencies.frame.height, 100)
+        let appearance = app.buttons["openAppearanceSettings"]
+        scrollToFormElement(appearance, in: app)
+        XCTAssertTrue(appearance.label.contains("Appearance"))
+        XCTAssertLessThan(appearance.frame.height, 100)
+        appearance.tap()
+        XCTAssertTrue(app.navigationBars["Appearance"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["tabMore"].isHittable)
+    }
+
+    @MainActor
     private func createPolishTestBudget(in app: XCUIApplication) -> String {
         app.buttons["openCreateBudget"].tap()
         let name = "UI budget with a longer descriptive name \(UUID().uuidString.prefix(8))"
