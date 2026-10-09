@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 nonisolated struct ReminderPreferences: Codable, Equatable, Sendable {
     static let storageKey = "recurringReminderPreferences"
