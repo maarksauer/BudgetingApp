@@ -6,40 +6,36 @@ import UIKit
 import AppKit
 #endif
 
-struct NotificationSettingsView: View {
+struct RecurringReminderSettings: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(ReminderPreferences.storageKey) private var storedPreferences = ReminderPreferences().storageValue
     @ObservedObject private var manager = NotificationManager.shared
     @State private var enabling = false
+    @State private var isExpanded = false
     private var preferences: ReminderPreferences { ReminderPreferences.decode(storedPreferences) }
 
     var body: some View {
-        Form {
-            Section {
-                ReadableDetailRow(title: "Recurring Payments", value: statusText)
-                    .accessibilityIdentifier("reminderAuthorizationStatus")
+        Section {
+            DisclosureGroup(isExpanded: $isExpanded) {
                 Toggle("Payment Reminders", isOn: Binding(
                     get: { preferences.isEnabled },
                     set: { value in var settings = preferences; settings.isEnabled = value; storedPreferences = settings.storageValue }
                 ))
                 .disabled(manager.permission != .allowed || enabling)
                 .accessibilityIdentifier("recurringRemindersEnabled")
+
                 if manager.permission == .notDetermined {
                     Button("Enable Notifications", action: enable)
                         .disabled(enabling).accessibilityIdentifier("enableRecurringNotifications")
                 } else if manager.permission == .denied {
-                    Text("Notifications are disabled in your device settings.")
-                        .foregroundStyle(.secondary)
+                    Text("Notifications are disabled in your device settings.").foregroundStyle(.secondary)
                     Button("Open Notification Settings", action: openSystemSettings)
                         .accessibilityIdentifier("openSystemNotificationSettings")
                 } else if manager.permission == .unknown {
                     Button("Check Notification Status") { manager.refreshNotifications(context: modelContext) }
                 }
-            } footer: {
-                Text("Reminders never record a payment automatically. Tap a notification to open the payment and confirm it was paid.")
-            }
-            Section("Reminder Timing") {
+
                 Picker("Remind Me", selection: Binding(
                     get: { preferences.daysBefore },
                     set: { value in var settings = preferences; settings.daysBefore = value; storedPreferences = settings.storageValue }
@@ -49,6 +45,7 @@ struct NotificationSettingsView: View {
                     }
                 }
                 .pickerStyle(.menu).accessibilityIdentifier("recurringReminderLeadDays")
+
                 DatePicker("Time", selection: Binding(
                     get: { Calendar.current.date(bySettingHour: preferences.hour, minute: preferences.minute, second: 0, of: Date()) ?? Date() },
                     set: { date in
@@ -59,12 +56,15 @@ struct NotificationSettingsView: View {
                     }
                 ), displayedComponents: .hourAndMinute)
                 .accessibilityIdentifier("recurringReminderTime")
-                Text("\(preferences.timingDescription) at \(timeText), using your device’s local time. Postponed payments use their postponed due date.")
+
+                Text("\(preferences.timingDescription) at \(timeText), using your device’s local time. Applies to all active recurring payments; postponed payments use their postponed due date.")
                     .font(.caption).foregroundStyle(.secondary)
-            }
-            if manager.permission == .allowed && preferences.isEnabled {
-                Section("Scheduled Reminders") {
-                    ReadableDetailRow(title: "Pending", value: "\(manager.scheduledCount)")
+                    .accessibilityIdentifier("recurringReminderTimingSummary")
+                Text("Tap a reminder to open the payment and confirm Paid. Reminders never record payments automatically.")
+                    .font(.caption).foregroundStyle(.secondary)
+
+                if manager.permission == .allowed && preferences.isEnabled {
+                    ReadableDetailRow(title: "Pending Reminders", value: "\(manager.scheduledCount)")
                     if manager.waitingCount > 0 {
                         Text("\(manager.waitingCount) later reminders are waiting. The nearest payments are scheduled first; open the app as payments become due to refresh the queue.")
                             .font(.subheadline).foregroundStyle(.secondary)
@@ -72,19 +72,30 @@ struct NotificationSettingsView: View {
                     Button("Refresh Reminders") { manager.refreshNotifications(context: modelContext) }
                         .accessibilityIdentifier("refreshRecurringNotifications")
                 }
-            }
-            if let error = manager.lastError {
-                Section {
+                if let error = manager.lastError {
                     Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
                     Button("Try Again") { manager.refreshNotifications(context: modelContext) }
                 }
+            } label: {
+                AdaptiveValueRow {
+                    Label("Reminders", systemImage: "bell")
+                } trailing: {
+                    Text(statusText).foregroundStyle(.secondary)
+                        .accessibilityIdentifier("reminderAuthorizationStatus")
+                }
             }
+            .accessibilityIdentifier("recurringReminderSettings")
         }
-        .navigationTitle("Notifications").navigationBarTitleDisplayMode(.inline)
-        .task { manager.refreshNotifications(context: modelContext) }
+        .task {
+            if manager.lastError != nil { isExpanded = true }
+            manager.refreshNotifications(context: modelContext)
+        }
         .onChange(of: storedPreferences) { _, _ in manager.refreshNotifications(context: modelContext) }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { manager.refreshNotifications(context: modelContext) }
+        }
+        .onChange(of: manager.lastError) { _, error in
+            if error != nil { isExpanded = true }
         }
     }
 
@@ -118,6 +129,7 @@ struct NotificationSettingsView: View {
         #endif
     }
 }
+
 
 struct ReminderPaymentDestination: View {
     @Query private var payments: [RecurringPayment]

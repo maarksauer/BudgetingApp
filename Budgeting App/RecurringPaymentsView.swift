@@ -25,91 +25,92 @@ struct RecurringPaymentsView: View {
 
     var body: some View {
 
-        Group {
+        List {
+            RecurringReminderSettings()
 
             if payments.isEmpty {
+                Section {
+                    emptyState
+                        .frame(maxWidth: .infinity)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                }
+            }
 
-                ScrollView { emptyState }
 
-            } else {
+            if !duePayments.isEmpty {
 
-                List {
+                Section("Due") {
 
-                    if !duePayments.isEmpty {
+                    ForEach(
+                        duePayments
+                    ) { payment in
 
-                        Section("Due") {
+                        actionablePaymentRow(
+                            payment
+                        )
+                    }
+                }
+            }
 
-                            ForEach(
-                                duePayments
-                            ) { payment in
+            if !postponedPayments.isEmpty {
 
-                                actionablePaymentRow(
-                                    payment
-                                )
-                            }
+                Section("Postponed") {
+
+                    ForEach(
+                        postponedPayments
+                    ) { payment in
+
+                        actionablePaymentRow(
+                            payment
+                        )
+                    }
+                }
+            }
+
+            if !upcomingPayments.isEmpty {
+
+                Section("Upcoming") {
+
+                    ForEach(
+                        upcomingPayments
+                    ) { payment in
+
+                        NavigationLink {
+
+                            RecurringPaymentDetailView(
+                                payment: payment
+                            )
+
+                        } label: {
+
+                            recurringPaymentRow(
+                                payment
+                            )
                         }
                     }
+                }
+            }
 
-                    if !postponedPayments.isEmpty {
+            if !pausedPayments.isEmpty {
 
-                        Section("Postponed") {
+                Section("Paused") {
 
-                            ForEach(
-                                postponedPayments
-                            ) { payment in
+                    ForEach(
+                        pausedPayments
+                    ) { payment in
 
-                                actionablePaymentRow(
-                                    payment
-                                )
-                            }
-                        }
-                    }
+                        NavigationLink {
 
-                    if !upcomingPayments.isEmpty {
+                            RecurringPaymentDetailView(
+                                payment: payment
+                            )
 
-                        Section("Upcoming") {
+                        } label: {
 
-                            ForEach(
-                                upcomingPayments
-                            ) { payment in
-
-                                NavigationLink {
-
-                                    RecurringPaymentDetailView(
-                                        payment: payment
-                                    )
-
-                                } label: {
-
-                                    recurringPaymentRow(
-                                        payment
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    if !pausedPayments.isEmpty {
-
-                        Section("Paused") {
-
-                            ForEach(
-                                pausedPayments
-                            ) { payment in
-
-                                NavigationLink {
-
-                                    RecurringPaymentDetailView(
-                                        payment: payment
-                                    )
-
-                                } label: {
-
-                                    recurringPaymentRow(
-                                        payment
-                                    )
-                                }
-                            }
+                            recurringPaymentRow(
+                                payment
+                            )
                         }
                     }
                 }

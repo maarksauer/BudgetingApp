@@ -3,25 +3,31 @@ import Foundation
 
 final class BudgetingAppUITests: XCTestCase {
     @MainActor
-    func testNotificationTimingSettingsPersistWithoutRequestingPermission() {
+    func testRecurringReminderControlsAreBuiltInAndPersistWithoutRequestingPermission() {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launch()
         app.buttons["tabMore"].tap()
-        let open = app.buttons["openNotificationsSettings"].firstMatch
+        XCTAssertFalse(app.buttons["openNotificationsSettings"].exists)
+        let open = app.buttons["openRecurringPayments"].firstMatch
         scrollToFormElement(open, in: app); open.tap()
-        XCTAssertTrue(app.navigationBars["Notifications"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.descendants(matching: .any)["reminderAuthorizationStatus"].firstMatch.exists)
-        XCTAssertTrue(app.switches["recurringRemindersEnabled"].exists)
+        XCTAssertTrue(app.navigationBars["Recurring Payments"].waitForExistence(timeout: 5))
+        let reminders = app.buttons["recurringReminderSettings"].firstMatch
+        XCTAssertTrue(reminders.waitForExistence(timeout: 5))
         let lead = app.buttons["recurringReminderLeadDays"]
+        if !lead.exists { reminders.tap() }
+        XCTAssertTrue(app.switches["recurringRemindersEnabled"].exists)
         scrollToFormElement(lead, in: app); lead.tap()
         app.buttons["3 days before"].tap()
-        let explanation = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "3 days before at ")).firstMatch
+        let explanation = app.staticTexts["recurringReminderTimingSummary"]
         XCTAssertTrue(explanation.waitForExistence(timeout: 5))
+        XCTAssertTrue(explanation.label.hasPrefix("3 days before at "))
         XCTAssertTrue(app.descendants(matching: .any)["recurringReminderTime"].firstMatch.exists)
-        app.navigationBars["Notifications"].buttons["More"].tap()
+        app.navigationBars["Recurring Payments"].buttons["More"].tap()
         scrollToFormElement(open, in: app); open.tap()
+        if !lead.exists { reminders.tap() }
         XCTAssertTrue(explanation.waitForExistence(timeout: 5))
+        XCTAssertTrue(explanation.label.hasPrefix("3 days before at "))
         lead.tap(); app.buttons["On the due date"].tap()
         XCTAssertFalse(app.alerts.firstMatch.exists)
     }
