@@ -3,6 +3,11 @@ import SwiftData
 
 @main
 struct BudgetingAppApp: App {
+    #if os(iOS) || os(visionOS)
+    @UIApplicationDelegateAdaptor(BudgetNotificationAppDelegate.self) private var notificationDelegate
+    #endif
+
+    init() { NotificationManager.shared.installDelegate() }
 
     var body: some Scene {
         WindowGroup {

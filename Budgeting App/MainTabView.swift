@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 #if os(iOS) || os(visionOS)
 import UIKit
 #endif
@@ -38,6 +39,10 @@ private enum AppTab: Int, CaseIterable {
 }
 
 struct MainTabView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
+    @ObservedObject private var notificationManager = NotificationManager.shared
+    @AppStorage(ReminderPreferences.storageKey) private var reminderPreferences = ReminderPreferences().storageValue
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var selectedTab: AppTab = .add
     @State private var expenseDraft = ExpenseDraft()
@@ -88,7 +93,26 @@ struct MainTabView: View {
                 dock
             }
         }
+        .task {
+            notificationManager.refreshNotifications(context: modelContext)
+            openReminderIfNeeded()
+        }
+        .onChange(of: notificationManager.openRequest) { _, _ in openReminderIfNeeded() }
+        .onChange(of: reminderPreferences) { _, _ in notificationManager.refreshNotifications(context: modelContext) }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { notificationManager.refreshNotifications(context: modelContext); openReminderIfNeeded() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: ReminderEvents.recordsChanged)) { _ in
+            notificationManager.refreshNotifications(context: modelContext)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
+            // Direct saves/autosaves also cover wallet deletion or renaming.
+            notificationManager.refreshNotifications(context: modelContext)
+        }
         #if os(iOS) || os(visionOS)
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
+            notificationManager.refreshNotifications(context: modelContext)
+        }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
             keyboardIsVisible = true
         }
@@ -96,6 +120,13 @@ struct MainTabView: View {
             keyboardIsVisible = false
         }
         #endif
+    }
+
+    private func openReminderIfNeeded() {
+        guard let request = notificationManager.openRequest else { return }
+        morePath = [.recurringPayments, .reminderPayment(request.paymentKey, request.occurrenceKey)]
+        selectedTab = .more
+        notificationManager.consumeOpenRequest(request.id)
     }
 
     private var dock: some View {

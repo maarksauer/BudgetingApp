@@ -60,6 +60,9 @@
 		592AAE774823538640238A0A /* TransactionFormFields.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80C395EE7911C525727D320C /* TransactionFormFields.swift */; };
 		C4D4EB046B32BEB266FE6DED /* RecurringSchedule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CE8918EE48493812E2043D9 /* RecurringSchedule.swift */; };
 		DD361344C34FA8291E6471FA /* TransferFormFields.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12CD5E4C4FAFDCB6ED8F14DA /* TransferFormFields.swift */; };
+		530ED0EEB5FB925C1F638A3D /* ReminderPlanning.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AAD692DF4CB9C6269D72819 /* ReminderPlanning.swift */; };
+		DEFA15C55F557B280DDA1795 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90DC3CA4E45ADAAAFE557DFB /* NotificationManager.swift */; };
+		1C801D307F54C00F6E01B1C1 /* NotificationSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1077628FC1A983702139AF30 /* NotificationSettingsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -138,6 +141,9 @@
 		80C395EE7911C525727D320C /* TransactionFormFields.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionFormFields.swift; sourceTree = "<group>"; };
 		3CE8918EE48493812E2043D9 /* RecurringSchedule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurringSchedule.swift; sourceTree = "<group>"; };
 		12CD5E4C4FAFDCB6ED8F14DA /* TransferFormFields.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferFormFields.swift; sourceTree = "<group>"; };
+		9AAD692DF4CB9C6269D72819 /* ReminderPlanning.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderPlanning.swift; sourceTree = "<group>"; };
+		90DC3CA4E45ADAAAFE557DFB /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
+		1077628FC1A983702139AF30 /* NotificationSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationSettingsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -188,6 +194,9 @@
 		86E929C1305D850700AF8F5C /* Budgeting App */ = {
 			isa = PBXGroup;
 			children = (
+				9AAD692DF4CB9C6269D72819 /* ReminderPlanning.swift */,
+				90DC3CA4E45ADAAAFE557DFB /* NotificationManager.swift */,
+				1077628FC1A983702139AF30 /* NotificationSettingsView.swift */,
 				C77EDF399F8AE3B39232C95F /* BudgetSchedule.swift */,
 				F1260DDDD1F9988E9054CE7E /* DashboardView.swift */,
 				74B501BF25E0A3576CC4DEF3 /* DashboardMetrics.swift */,
@@ -397,6 +406,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				530ED0EEB5FB925C1F638A3D /* ReminderPlanning.swift in Sources */,
+				DEFA15C55F557B280DDA1795 /* NotificationManager.swift in Sources */,
+				1C801D307F54C00F6E01B1C1 /* NotificationSettingsView.swift in Sources */,
 				CA5ECC8955EAC5026D216230 /* BudgetSchedule.swift in Sources */,
 				6D9C454986012309DFC5C64C /* DashboardView.swift in Sources */,
 				0715FCA33F4800A034ACBF53 /* DashboardMetrics.swift in Sources */,

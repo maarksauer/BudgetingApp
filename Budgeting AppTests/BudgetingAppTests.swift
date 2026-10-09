@@ -1454,6 +1454,286 @@ final class BudgetingAppTests: XCTestCase {
         XCTAssertFalse(first.isRecurring)
     }
 
+    @MainActor
+    func testReminderPlanningUsesEffectiveDateLocalTimeAndCalendarLeadDays() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Budapest")!
+        let original = calendar.date(from: DateComponents(year: 2026, month: 10, day: 24))!
+        let postponed = calendar.date(from: DateComponents(year: 2026, month: 10, day: 26))!
+        let payment = reminderSnapshot("rent", due: postponed, scheduled: original)
+        var settings = ReminderPreferences(isEnabled: true)
+        let onDue = try XCTUnwrap(ReminderPlanner.specification(for: payment, preferences: settings, calendar: calendar))
+        XCTAssertEqual(calendar.dateComponents([.year, .month, .day, .hour, .minute], from: onDue.logicalFireDate),
+                       DateComponents(year: 2026, month: 10, day: 26, hour: 9, minute: 0))
+        XCTAssertEqual(onDue.title, "Payment Due")
+        XCTAssertTrue(onDue.body.contains("Rent • 4,990 HUF"))
+        settings.daysBefore = 3; settings.hour = 8; settings.minute = 30
+        let earlier = try XCTUnwrap(ReminderPlanner.specification(for: payment, preferences: settings, calendar: calendar))
+        XCTAssertEqual(calendar.dateComponents([.year, .month, .day, .hour, .minute], from: earlier.logicalFireDate),
+                       DateComponents(year: 2026, month: 10, day: 23, hour: 8, minute: 30))
+        XCTAssertNotEqual(earlier.fingerprint, onDue.fingerprint)
+        XCTAssertEqual(ReminderPlanner.fireDate(for: onDue, now: postponed.addingTimeInterval(50_000)), postponed.addingTimeInterval(50_002))
+        XCTAssertNil(ReminderPlanner.specification(for: reminderSnapshot("paused", due: original, active: false), preferences: settings))
+        settings.isEnabled = false
+        XCTAssertNil(ReminderPlanner.specification(for: payment, preferences: settings))
+        XCTAssertEqual(ReminderPreferences.decode("invalid JSON"), ReminderPreferences())
+        settings.isEnabled = true; settings.hour = 25
+        XCTAssertEqual(ReminderPreferences.decode(settings.storageValue), ReminderPreferences())
+        XCTAssertNil(ReminderPlanner.specification(for: payment, preferences: settings))
+    }
+
+    @MainActor
+    func testReminderIdentitySurvivesStoreReopeningAndEqualCreationDates() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let schema = backupSchema
+        let configuration = ModelConfiguration(schema: schema, url: directory.appendingPathComponent("reminders.store"), cloudKitDatabase: .none)
+        var keys: [String: String] = [:]
+        do {
+            let container = try ModelContainer(for: schema, configurations: [configuration])
+            let context = ModelContext(container)
+            for name in ["First", "Second"] {
+                let payment = RecurringPayment(name: name, amount: 10, frequency: "Monthly", nextPaymentDate: date(2026, 11, 1))
+                payment.createdAt = date(2026, 10, 9)
+                context.insert(payment)
+            }
+            try context.save()
+            keys = Dictionary(uniqueKeysWithValues: try context.fetch(FetchDescriptor<RecurringPayment>()).map { ($0.name, RecurringReminderSnapshot(payment: $0).paymentKey) })
+            XCTAssertEqual(Set(keys.values).count, 2)
+        }
+        let reopened = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(reopened)
+        let reopenedKeys = Dictionary(uniqueKeysWithValues: try context.fetch(FetchDescriptor<RecurringPayment>()).map { ($0.name, RecurringReminderSnapshot(payment: $0).paymentKey) })
+        XCTAssertEqual(reopenedKeys, keys)
+    }
+
+    @MainActor
+    func testRemindersRespectPermissionAndToggleWithoutTouchingUnrelatedNotifications() async throws {
+        let (defaults, suite) = reminderDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let client = FakeReminderNotificationClient()
+        client.unrelated = [ScheduledReminder(identifier: "other.feature", userInfo: [:])]
+        let manager = NotificationManager(client: client, defaults: defaults, now: { self.date(2026, 10, 9) })
+        let payment = reminderSnapshot("bill", due: date(2026, 11, 1))
+        manager.refresh(snapshots: [payment]); await manager.waitForRefresh()
+        XCTAssertEqual(client.requests.count, 1)
+        XCTAssertEqual(client.permissionRequests, 0)
+        client.deliveredRequests = [ScheduledReminder(identifier: payment.paymentKey, userInfo: client.requests[payment.paymentKey]!.userInfo)]
+        client.status = .denied
+        manager.refresh(snapshots: [payment]); await manager.waitForRefresh()
+        XCTAssertTrue(client.requests.isEmpty); XCTAssertTrue(client.deliveredRequests.isEmpty)
+        XCTAssertEqual(client.unrelated.map(\.identifier), ["other.feature"])
+        XCTAssertEqual(manager.permission, .denied)
+        client.status = .allowed
+        defaults.set(ReminderPreferences(isEnabled: false).storageValue, forKey: ReminderPreferences.storageKey)
+        manager.refresh(snapshots: [payment]); await manager.waitForRefresh()
+        XCTAssertTrue(client.requests.isEmpty)
+        defaults.set(ReminderPreferences(isEnabled: true).storageValue, forKey: ReminderPreferences.storageKey)
+        manager.refresh(snapshots: [payment]); await manager.waitForRefresh()
+        XCTAssertEqual(client.requests.count, 1)
+        let granted = await manager.requestPermission()
+        XCTAssertTrue(granted); XCTAssertEqual(client.permissionRequests, 1)
+    }
+
+    @MainActor
+    func testDismissedOverdueReminderDoesNotRepeatAfterRelaunchButPostponeAndRevertRestoreIt() async throws {
+        let (defaults, suite) = reminderDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let client = FakeReminderNotificationClient()
+        var clock = date(2026, 10, 9, hour: 12)
+        let first = NotificationManager(client: client, defaults: defaults, now: { clock })
+        let original = reminderSnapshot("bill", due: date(2026, 10, 1))
+        first.refresh(snapshots: [original]); await first.waitForRefresh()
+        XCTAssertEqual(client.fireDates[original.paymentKey], clock.addingTimeInterval(2))
+        // Simulate delivery and dismissal while the app is closed.
+        client.requests.removeAll(); clock = clock.addingTimeInterval(10)
+        let reopened = NotificationManager(client: client, defaults: defaults, now: { clock })
+        reopened.refresh(snapshots: [original]); await reopened.waitForRefresh()
+        XCTAssertTrue(client.requests.isEmpty); XCTAssertEqual(client.addAttempts, 1)
+        let postponed = reminderSnapshot("bill", due: date(2026, 10, 15), scheduled: original.scheduledDate)
+        reopened.refresh(snapshots: [postponed]); await reopened.waitForRefresh()
+        XCTAssertEqual(client.requests[original.paymentKey]?.occurrenceKey, postponed.occurrenceKey)
+        reopened.refresh(snapshots: [original]); await reopened.waitForRefresh()
+        XCTAssertEqual(client.requests[original.paymentKey]?.occurrenceKey, original.occurrenceKey)
+        XCTAssertEqual(client.addAttempts, 3)
+    }
+
+    @MainActor
+    func testReminderQueueDisplacementRemainsEligibleAfterItsOriginalTimePasses() async throws {
+        let (defaults, suite) = reminderDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let client = FakeReminderNotificationClient()
+        var clock = date(2026, 10, 1)
+        let manager = NotificationManager(client: client, defaults: defaults, capacity: 1, now: { clock })
+        let later = reminderSnapshot("later", due: date(2026, 10, 3))
+        let earlier = reminderSnapshot("earlier", due: date(2026, 10, 2))
+        manager.refresh(snapshots: [later]); await manager.waitForRefresh()
+        manager.refresh(snapshots: [later, earlier]); await manager.waitForRefresh()
+        XCTAssertEqual(Set(client.requests.keys), [earlier.paymentKey])
+        XCTAssertEqual(manager.waitingCount, 1)
+        clock = date(2026, 10, 4)
+        manager.refresh(snapshots: [later]); await manager.waitForRefresh()
+        XCTAssertEqual(Set(client.requests.keys), [later.paymentKey])
+        XCTAssertEqual(client.fireDates[later.paymentKey], clock.addingTimeInterval(2))
+        XCTAssertEqual(manager.waitingCount, 0)
+    }
+
+    @MainActor
+    func testLatestReminderRefreshWinsWhenAnOlderScheduleIsStillInFlight() async throws {
+        let (defaults, suite) = reminderDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let client = FakeReminderNotificationClient()
+        client.pauseNextAdd = true
+        let manager = NotificationManager(client: client, defaults: defaults, now: { self.date(2026, 10, 1) })
+        let started = expectation(description: "Old schedule started")
+        client.onAddStarted = { started.fulfill() }
+        manager.refresh(snapshots: [reminderSnapshot("bill", due: date(2026, 11, 1))])
+        let waitResult = await XCTWaiter.fulfillment(of: [started], timeout: 3)
+        XCTAssertEqual(waitResult, .completed)
+        manager.refresh(snapshots: [reminderSnapshot("bill", due: date(2026, 11, 5))])
+        manager.refresh(snapshots: [])
+        client.resumeAdd()
+        await manager.waitForRefresh()
+        XCTAssertTrue(client.requests.isEmpty)
+        XCTAssertEqual(manager.scheduledCount, 0)
+    }
+
+    @MainActor
+    func testReminderSchedulingFailureCanRetryAndDeliveredOccurrenceIsNotRepeated() async throws {
+        let (defaults, suite) = reminderDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let client = FakeReminderNotificationClient()
+        client.failAdd = true
+        let manager = NotificationManager(client: client, defaults: defaults, now: { self.date(2026, 10, 9, hour: 12) })
+        let payment = reminderSnapshot("bill", due: date(2026, 10, 1))
+        manager.refresh(snapshots: [payment]); await manager.waitForRefresh()
+        XCTAssertNotNil(manager.lastError); XCTAssertTrue(client.requests.isEmpty)
+        client.failAdd = false
+        manager.refresh(snapshots: [payment]); await manager.waitForRefresh()
+        XCTAssertNil(manager.lastError); XCTAssertEqual(client.requests.count, 1)
+        let specification = try XCTUnwrap(client.requests[payment.paymentKey])
+        client.requests.removeAll()
+        client.deliveredRequests = [ScheduledReminder(identifier: payment.paymentKey, userInfo: specification.userInfo)]
+        // Delivered notifications also prevent a repeat if the local receipt was lost.
+        defaults.removeObject(forKey: "recurringReminderReceipts")
+        let reopened = NotificationManager(client: client, defaults: defaults, now: { self.date(2026, 10, 9, hour: 12) })
+        reopened.refresh(snapshots: [payment]); await reopened.waitForRefresh()
+        XCTAssertTrue(client.requests.isEmpty); XCTAssertEqual(client.addAttempts, 2)
+    }
+
+    @MainActor
+    func testEverySavedRecurringActionRefreshesReminderAndFailedSaveKeepsIt() async throws {
+        let context = try backupContext()
+        let wallet = Wallet(name: "Bank", startingBalance: 1000, currencyCode: "EUR", walletType: "Bank Account")
+        let category = SpendingCategory(name: "Bills", icon: "doc.text.fill", colorName: "red")
+        context.insert(wallet); context.insert(category); try context.save()
+        let (defaults, suite) = reminderDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let client = FakeReminderNotificationClient()
+        let manager = NotificationManager(client: client, defaults: defaults, now: { self.date(2025, 1, 1) })
+        let events = ReminderEventCounter()
+        let observer = NotificationCenter.default.addObserver(forName: ReminderEvents.recordsChanged, object: context, queue: nil) { _ in events.increment() }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        var draft = RecurringPaymentFormDraft()
+        draft.name = "Rent"; draft.details.amount = "25"; draft.details.selectedWallet = wallet; draft.details.selectedCategory = category
+        draft.scheduledDate = date(2026, 10, 10)
+        let payment = try FormStore.createRecurringPayment(draft, context: context)
+        manager.refreshNotifications(context: context); await manager.waitForRefresh()
+        let key = RecurringReminderSnapshot(payment: payment).paymentKey
+        let original = try XCTUnwrap(client.requests[key])
+        XCTAssertEqual(events.count, 1)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<ExpenseTransaction>()).count, 0)
+        XCTAssertThrowsError(try FormStore.setRecurringPaymentActive(payment, active: false, context: context) { _ in throw CocoaError(.fileWriteOutOfSpace) })
+        manager.refreshNotifications(context: context); await manager.waitForRefresh()
+        XCTAssertEqual(events.count, 1); XCTAssertEqual(client.requests[key], original)
+        let paid = try FormStore.confirmRecurringPayment(payment, amount: "25", date: draft.scheduledDate, context: context)
+        manager.refreshNotifications(context: context); await manager.waitForRefresh()
+        XCTAssertNotEqual(client.requests[key]?.occurrenceKey, original.occurrenceKey)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<ExpenseTransaction>()).count, 1)
+        try FormStore.revertRecurringTransaction(paid, context: context)
+        manager.refreshNotifications(context: context); await manager.waitForRefresh()
+        XCTAssertEqual(client.requests[key]?.occurrenceKey, original.occurrenceKey)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<ExpenseTransaction>()).count, 0)
+        try FormStore.postponeRecurringPayment(payment, until: date(2026, 10, 15), context: context)
+        manager.refreshNotifications(context: context); await manager.waitForRefresh()
+        let postponed = try XCTUnwrap(client.requests[key])
+        XCTAssertNotEqual(postponed.occurrenceKey, original.occurrenceKey)
+        draft = RecurringPaymentFormDraft(payment: payment); draft.name = "Updated rent"; draft.details.amount = "30"
+        try FormStore.updateRecurringPayment(payment, draft: draft, context: context)
+        manager.refreshNotifications(context: context); await manager.waitForRefresh()
+        XCTAssertEqual(client.requests[key]?.occurrenceKey, postponed.occurrenceKey)
+        XCTAssertTrue(client.requests[key]?.body.contains("Updated rent") == true)
+        let edited = try XCTUnwrap(client.requests[key])
+        let paidPostponed = try FormStore.confirmRecurringPayment(payment, amount: "30", date: payment.nextPaymentDate, context: context)
+        manager.refreshNotifications(context: context); await manager.waitForRefresh()
+        XCTAssertNotEqual(client.requests[key]?.occurrenceKey, postponed.occurrenceKey)
+        try FormStore.revertRecurringTransaction(paidPostponed, context: context)
+        manager.refreshNotifications(context: context); await manager.waitForRefresh()
+        XCTAssertEqual(client.requests[key]?.occurrenceKey, postponed.occurrenceKey)
+        client.deliveredRequests = [ScheduledReminder(identifier: key, userInfo: edited.userInfo)]
+        try FormStore.setRecurringPaymentActive(payment, active: false, context: context)
+        manager.refreshNotifications(context: context); await manager.waitForRefresh()
+        XCTAssertTrue(client.requests.isEmpty); XCTAssertTrue(client.deliveredRequests.isEmpty)
+        try FormStore.setRecurringPaymentActive(payment, active: true, context: context)
+        manager.refreshNotifications(context: context); await manager.waitForRefresh()
+        XCTAssertEqual(client.requests.count, 1)
+        client.deliveredRequests = [ScheduledReminder(identifier: key, userInfo: edited.userInfo)]
+        try FormStore.skipRecurringPayment(payment, context: context)
+        manager.refreshNotifications(context: context); await manager.waitForRefresh()
+        XCTAssertNotEqual(client.requests[key]?.occurrenceKey, postponed.occurrenceKey)
+        XCTAssertTrue(client.deliveredRequests.isEmpty)
+        let skipped = try XCTUnwrap(client.requests[key])
+        client.deliveredRequests = [ScheduledReminder(identifier: key, userInfo: skipped.userInfo)]
+        try FormStore.deleteRecurringPayment(payment, context: context)
+        manager.refreshNotifications(context: context); await manager.waitForRefresh()
+        XCTAssertTrue(client.requests.isEmpty); XCTAssertTrue(client.deliveredRequests.isEmpty)
+        XCTAssertEqual(events.count, 11)
+    }
+
+    @MainActor
+    func testBackupRestoreRebuildsRemindersWithoutRoutingOldNotificationsToNewRecords() async throws {
+        let context = try backupContext()
+        try populateBackupFixture(context)
+        let payment = try XCTUnwrap(try context.fetch(FetchDescriptor<RecurringPayment>()).first)
+        payment.isActive = true; try context.save()
+        let snapshot = try BackupStore.capture(context: context, appearance: .system)
+        let (defaults, suite) = reminderDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let client = FakeReminderNotificationClient()
+        let manager = NotificationManager(client: client, defaults: defaults, now: { self.date(2026, 10, 1) })
+        manager.refreshNotifications(context: context); await manager.waitForRefresh()
+        let old = try XCTUnwrap(client.requests.values.first)
+        try BackupStore.restore(snapshot, context: context)
+        manager.refreshNotifications(context: context); await manager.waitForRefresh()
+        let restored = try XCTUnwrap(try context.fetch(FetchDescriptor<RecurringPayment>()).first)
+        let newKey = RecurringReminderSnapshot(payment: restored).paymentKey
+        XCTAssertNotEqual(newKey, old.paymentKey)
+        XCTAssertNil(client.requests[old.paymentKey]); XCTAssertEqual(client.requests.count, 1)
+        manager.openPaymentReminder(paymentKey: old.paymentKey, occurrenceKey: old.occurrenceKey)
+        XCTAssertEqual(manager.openRequest?.paymentKey, old.paymentKey)
+        XCTAssertNotEqual(manager.openRequest?.paymentKey, newKey)
+        let requestID = try XCTUnwrap(manager.openRequest?.id)
+        manager.consumeOpenRequest(UUID()); XCTAssertNotNil(manager.openRequest)
+        manager.consumeOpenRequest(requestID); XCTAssertNil(manager.openRequest)
+        manager.openPaymentReminder(paymentKey: "unrelated", occurrenceKey: "anything")
+        XCTAssertNil(manager.openRequest)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<ExpenseTransaction>()).count, snapshot.transactions.count)
+    }
+
+    @MainActor
+    private func reminderDefaults() -> (UserDefaults, String) {
+        let suite = "BudgetingAppTests.reminders.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.set(ReminderPreferences(isEnabled: true).storageValue, forKey: ReminderPreferences.storageKey)
+        return (defaults, suite)
+    }
+
+    private func reminderSnapshot(_ key: String, due: Date, scheduled: Date? = nil, active: Bool = true) -> RecurringReminderSnapshot {
+        RecurringReminderSnapshot(paymentKey: ReminderIdentity.prefix + key, name: "Rent", amountText: "4,990", currency: "HUF",
+                                  scheduledDate: scheduled ?? due, effectiveDueDate: due, isActive: active)
+    }
+
     private var utcCalendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
@@ -1463,4 +1743,46 @@ final class BudgetingAppTests: XCTestCase {
     private func date(_ year: Int, _ month: Int, _ day: Int, hour: Int = 0, minute: Int = 0) -> Date {
         utcCalendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour, minute: minute))!
     }
+}
+
+@MainActor
+private final class FakeReminderNotificationClient: ReminderNotificationClient {
+    var status: ReminderAuthorization = .allowed
+    var permissionRequests = 0
+    var requests: [String: ReminderSpecification] = [:]
+    var fireDates: [String: Date] = [:]
+    var deliveredRequests: [ScheduledReminder] = []
+    var unrelated: [ScheduledReminder] = []
+    var failAdd = false
+    var addAttempts = 0
+    var pauseNextAdd = false
+    var onAddStarted: (() -> Void)?
+    private var suspendedAdd: CheckedContinuation<Void, Never>?
+    func authorizationStatus() async -> ReminderAuthorization { status }
+    func requestPermission() async throws -> Bool { permissionRequests += 1; return status == .allowed }
+    func pending() async -> [ScheduledReminder] {
+        unrelated + requests.values.map { ScheduledReminder(identifier: $0.paymentKey, userInfo: $0.userInfo) }
+    }
+    func delivered() async -> [ScheduledReminder] { deliveredRequests }
+    func add(_ specification: ReminderSpecification, fireDate: Date) async throws {
+        addAttempts += 1
+        if pauseNextAdd {
+            pauseNextAdd = false
+            await withCheckedContinuation { continuation in suspendedAdd = continuation; onAddStarted?() }
+        }
+        if failAdd { throw CocoaError(.fileWriteUnknown) }
+        requests[specification.paymentKey] = specification; fireDates[specification.paymentKey] = fireDate
+    }
+    func resumeAdd() { suspendedAdd?.resume(); suspendedAdd = nil }
+    func removePending(_ identifiers: [String]) {
+        for identifier in identifiers { requests.removeValue(forKey: identifier); fireDates.removeValue(forKey: identifier) }
+    }
+    func removeDelivered(_ identifiers: [String]) { deliveredRequests.removeAll { identifiers.contains($0.identifier) } }
+}
+
+nonisolated private final class ReminderEventCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+    func increment() { lock.lock(); defer { lock.unlock() }; value += 1 }
+    var count: Int { lock.lock(); defer { lock.unlock() }; return value }
 }

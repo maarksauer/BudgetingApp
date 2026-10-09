@@ -1,11 +1,16 @@
 import SwiftUI
+import SwiftData
 
 nonisolated enum MoreRoute: Hashable {
-    case budgets, categories, recurringPayments, currencies, appearance, export, backup
+    case budgets, categories, recurringPayments, currencies, appearance, export, backup, notifications
+    case reminderPayment(String, String)
 }
 
 struct SettingsView: View {
     @Binding var path: [MoreRoute]
+    @Environment(\.modelContext) private var modelContext
+    @ObservedObject private var notificationManager = NotificationManager.shared
+    @AppStorage(ReminderPreferences.storageKey) private var storedReminders = ReminderPreferences().storageValue
     @AppStorage(CurrencyPreferences.storageKey) private var storedCurrencyPreferences = CurrencyPreferences.defaultStorageValue
     @AppStorage(AppAppearance.storageKey) private var appearance: AppAppearance = .system
 
@@ -49,6 +54,17 @@ struct SettingsView: View {
                     .accessibilityIdentifier("openAppearanceSettings")
                 }
 
+                Section("Notifications") {
+                    NavigationLink(value: MoreRoute.notifications) {
+                        AdaptiveValueRow {
+                            Label("Recurring Payments", systemImage: "bell")
+                        } trailing: {
+                            Text(reminderStatus).foregroundStyle(.secondary)
+                        }
+                    }
+                    .accessibilityIdentifier("openNotificationsSettings")
+                }
+
                 Section("Data") {
                     NavigationLink(value: MoreRoute.export) {
                         Label("Export Data", systemImage: "square.and.arrow.up")
@@ -62,6 +78,7 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("More")
+            .task { notificationManager.refreshNotifications(context: modelContext) }
             .navigationDestination(for: MoreRoute.self) { route in
                 switch route {
                 case .budgets: BudgetsView(embedded: true)
@@ -71,8 +88,19 @@ struct SettingsView: View {
                 case .appearance: AppearanceSettingsView()
                 case .export: ExportDataView()
                 case .backup: BackupRestoreView()
+                case .notifications: NotificationSettingsView()
+                case .reminderPayment(let key, let occurrence): ReminderPaymentDestination(paymentKey: key, occurrenceKey: occurrence)
                 }
             }
         }
     }
+    private var reminderStatus: String {
+        switch notificationManager.permission {
+        case .allowed: return ReminderPreferences.decode(storedReminders).isEnabled ? "On" : "Off"
+        case .denied: return "Off"
+        case .notDetermined: return "Not Enabled"
+        case .unknown: return "Unknown"
+        }
+    }
+
 }

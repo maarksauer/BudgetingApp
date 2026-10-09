@@ -395,6 +395,7 @@ enum BackupStore {
             try removeAll(context)
             try insert(snapshot, context: context)
             try commit(context)
+            NotificationCenter.default.post(name: ReminderEvents.recordsChanged, object: context)
         } catch {
             context.rollback()
             throw error

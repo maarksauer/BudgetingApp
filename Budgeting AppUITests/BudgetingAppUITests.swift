@@ -3,6 +3,30 @@ import Foundation
 
 final class BudgetingAppUITests: XCTestCase {
     @MainActor
+    func testNotificationTimingSettingsPersistWithoutRequestingPermission() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launch()
+        app.buttons["tabMore"].tap()
+        let open = app.buttons["openNotificationsSettings"].firstMatch
+        scrollToFormElement(open, in: app); open.tap()
+        XCTAssertTrue(app.navigationBars["Notifications"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["reminderAuthorizationStatus"].firstMatch.exists)
+        XCTAssertTrue(app.switches["recurringRemindersEnabled"].exists)
+        let lead = app.buttons["recurringReminderLeadDays"]
+        scrollToFormElement(lead, in: app); lead.tap()
+        app.buttons["3 days before"].tap()
+        let explanation = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "3 days before at ")).firstMatch
+        XCTAssertTrue(explanation.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["recurringReminderTime"].firstMatch.exists)
+        app.navigationBars["Notifications"].buttons["More"].tap()
+        scrollToFormElement(open, in: app); open.tap()
+        XCTAssertTrue(explanation.waitForExistence(timeout: 5))
+        lead.tap(); app.buttons["On the due date"].tap()
+        XCTAssertFalse(app.alerts.firstMatch.exists)
+    }
+
+    @MainActor
     func testLaunchOnCentralAddTabAndOverviewNavigation() {
         continueAfterFailure = false
         let app = XCUIApplication()

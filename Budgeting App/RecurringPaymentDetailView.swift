@@ -8,6 +8,7 @@ struct RecurringPaymentDetailView: View {
     @Query(sort: \Wallet.createdAt) private var wallets: [Wallet]
     @Query(sort: \SpendingCategory.createdAt) private var categories: [SpendingCategory]
     let payment: RecurringPayment
+    let reminderOccurrence: String?
     @State private var draft: RecurringPaymentFormDraft
     @FocusState private var focusedField: TransactionFormField?
     @State private var isEditing = false
@@ -22,8 +23,9 @@ struct RecurringPaymentDetailView: View {
     @State private var showingPostponeError = false
     @State private var saveError = ""
 
-    init(payment: RecurringPayment) {
+    init(payment: RecurringPayment, reminderOccurrence: String? = nil) {
         self.payment = payment
+        self.reminderOccurrence = reminderOccurrence
         _draft = State(initialValue: RecurringPaymentFormDraft(payment: payment))
     }
 
@@ -43,6 +45,12 @@ struct RecurringPaymentDetailView: View {
                     }
                 }
             } else {
+                if let reminderOccurrence, reminderOccurrence != RecurringReminderSnapshot(payment: payment).occurrenceKey {
+                    Section {
+                        Label("This reminder is for an earlier schedule. The payment’s current details are shown below.", systemImage: "info.circle")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                    }
+                }
                 summary
                 schedule
                 Section("Details") {
@@ -54,7 +62,7 @@ struct RecurringPaymentDetailView: View {
                     Text(payment.note.isEmpty ? "No note" : payment.note)
                         .foregroundStyle(payment.note.isEmpty ? .secondary : .primary)
                 }
-                if payment.isActive && (payment.isDue || payment.isPostponed) { currentActions }
+                if payment.isActive && (payment.isDue || payment.isPostponed || reminderOccurrence == RecurringReminderSnapshot(payment: payment).occurrenceKey) { currentActions }
                 if let last = paymentTransactions.first {
                     Section("Last Payment") {
                         ReadableDetailRow(title: "Paid", value: last.date.formatted(date: .long, time: .omitted))

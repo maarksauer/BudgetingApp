@@ -75,6 +75,8 @@ enum FormStore {
         do {
             let result = try changes()
             try commit(context)
+            // A failed save never publishes this event or changes reminders.
+            NotificationCenter.default.post(name: ReminderEvents.recordsChanged, object: context)
             return result
         } catch { context.rollback(); throw error }
     }
