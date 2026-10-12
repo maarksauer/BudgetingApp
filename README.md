@@ -2,6 +2,28 @@
 
 A SwiftUI and SwiftData budgeting app. Open `Budgeting App.xcodeproj` in Xcode and select the shared **Budgeting App** scheme.
 
+## Second reminders and quick Undo
+
+Enable **Reminder** in a payment's **Schedule**, then switch on **Second Reminder** in its reminder options. The second reminder starts Off. Each reminder has its own lead days and time; use **Custom…** for any lead time from 0 to 365 days. The first reminder defaults to the due date at 09:00, and the second to the due date at 18:00. Switching off Reminder stops both while preserving their timing choices. Create/Edit changes remain drafts until saved; adjustments in normal payment details save immediately.
+
+Both notifications open the same payment, and both follow Paid, Postpone, Skip, Edit, Pause, Resume, Delete, Revert, and Undo. Identical timing produces one alert. If both reminder times have already passed when scheduling, one overdue catch-up alert is used; opening the app does not repeat a dismissed alert. The notification queue counts reminder requests, so a payment with two distinct reminders uses two slots.
+
+After **Paid**, **Postpone**, or **Skip**, a banner above the dock offers **Undo** for 30 seconds. It works from the payment list and payment details, including preset and custom postponements. A new action replaces the previous Undo. Paid Undo removes the exact expense just created, restores its balance effect, and restores the previous original/postponed dates. Postpone and Skip Undo restore those dates without creating a transaction. Both reminders refresh for the restored state. Dismissing or letting the banner expire does not reverse the action; Paid can still be reverted through its existing transaction screen.
+
+Undo uses protected saves: a failed Undo rolls back and can be retried while the banner remains available. Editing, pausing, deleting, or restoring the affected payment, or editing/deleting its paid expense, makes an older Undo unavailable so it cannot overwrite newer changes. Other transactions are preserved. Undo is temporary for the current app session and is not included in backups.
+
+The second reminder adds four defaulted SwiftData scalar fields so existing saved bills retain their primary reminder and start with the second reminder Off. Backup format **4** includes both choices. Format **3** restores the primary choice and defaults the second Off; formats **1/2** without reminder settings restore both Off.
+
+### Check this update on an iPhone
+
+1. Upgrade your existing installation without deleting it. Check the primary reminder keeps its saved choice, the second starts Off, and all wallets, transactions, and balances remain.
+2. Create a bill with a first reminder 3 days before at 09:00 and a second on the due date at another time. Try Custom with 4 days. Save, restart, and verify both choices; repeat Edit/Cancel and toggling the second or main Reminder Off/On.
+3. With device permission allowed, put both times a few minutes apart today. Check foreground/background notifications and tap either to open the bill. Postpone, Skip, Pause/Resume, and Delete; check both reminders update together. Use identical times and an overdue bill to check single-alert handling.
+4. Paid, then immediately Undo: the new expense should disappear, the balance should return, and the old due/postponed state and reminders should return. Repeat preset/custom Postpone and Skip. Check a postponed bill and confirm unrelated expenses remain.
+5. Check the banner is above the dock in Light/Dark and large text. Dismiss it or wait 30 seconds and verify the action stays saved. Make another action or edit the affected record and check an older Undo is unavailable.
+6. Back up and restore both reminder choices. Restore an older format-3 file and verify its primary settings remain with Second Reminder Off; test format-1/2 files too.
+7. Run the shared Xcode scheme's tests. This update adds ten unit tests and two UI tests, including both-reminder timing, queue/delivery receipts, backup compatibility, action/Undo rollback, and the Undo banner's dock geometry. The project now includes 81 unit tests and 19 UI tests. Only Swift syntax, source wiring, and archive integrity checks were run here; Xcode tests, existing-store migration, rendered SwiftUI, and iOS notification delivery require Apple-toolchain/device verification.
+
 ## Wallet/More row layout and search warning fixes
 
 Replaced the shared row's `ViewThatFits` measurement with ordinary horizontal stacks at standard text sizes and vertical stacks at accessibility sizes. Rows now request their natural content height, and native Labels explicitly display both title and icon. This addresses the oversized blank wallet/Currencies/Appearance rows shown on device, and applies to every shared summary/detail row. The fixed dock layout and stored data/save code remain unchanged.
@@ -179,7 +201,7 @@ Open **More → Currencies** to see your **Added Currencies**, each with an on/o
 
 Existing wallets, transfers, transactions, and budgets keep their currencies and amounts when a currency is hidden. Wallet currency remains fixed after creation. Budget pickers include enabled currencies plus currencies already used by wallets/budgets, and retain an existing budget's selected currency. Totals remain separate by currency; enabling a currency does not add conversion rates or convert balances.
 
-New backups use format version 2 and include the added list, enabled currencies, and default. Earlier version 2 backups/settings without an added list use their enabled currencies as the initial added list. Restore previews show both preferences and apply them after the data save succeeds. Version 1 backups from the previous release remain supported and leave the current currency settings intact. Recovery copies also include the current currency preferences.
+Backups include the added list, enabled currencies, and default; currency preferences are supported in format versions 2 and later. Earlier version 2 backups/settings without an added list use their enabled currencies as the initial added list. Restore previews show both preferences and apply them after the data save succeeds. Version 1 backups from the previous release remain supported and leave the current currency settings intact. Recovery copies also include the current currency preferences.
 
 ### Check currencies
 
@@ -227,7 +249,7 @@ Each payment has its own **Reminder** toggle in **Schedule**. It is **Off by def
 
 The normal payment details also have the Schedule toggle and conditional Reminder section, so you can adjust reminders without changing the payment's amount or schedule. Those changes save immediately using the same protected save handling. Toggle Off cancels only that payment's pending and delivered reminders. Other payments keep their own choices.
 
-Choose **On the due date**, **1**, **2**, **3**, or **7 days before**, plus a time. Default timing is **9:00 AM on the due date**. Reminders use the effective due date, including a postponement, and show the payment name, expected amount, and wallet currency. There is no global timing control or separate Notifications destination in More.
+Choose **On the due date**, **1**, **2**, **3**, or **7 days before**, or **Custom…** (0–365 days), plus a time. An optional **Second Reminder** has its own timing. Default timing is **9:00 AM on the due date**. Reminders use the effective due date, including a postponement, and show the payment name, expected amount, and wallet currency. There is no global timing control or separate Notifications destination in More.
 
 The Reminder section shows the actual iOS notification permission. **Enable Notifications** requests alerts, sounds, and badges; merely turning on a payment's toggle does not display an iOS permission prompt. If permission is denied, **Open Notification Settings** opens the app's device settings, and returning checks the permission again. An opted-in payment can be saved while device permission is off, but will be scheduled only once permission is allowed. Enabling device permission does not opt other payments in.
 
@@ -235,9 +257,9 @@ Tap a notification to open that payment. An early reminder permits Paid before i
 
 Successful create, Paid, Postpone, Skip, Edit, Pause, Resume, Delete, Revert, and reminder-setting saves refresh the queue from saved records. Paid and Skip move opted-in reminders to the next occurrence; Postpone uses its postponed date. Pause/Delete remove pending and delivered notifications. Resume restores reminders only when that payment's Reminder choice remains On. Revert restores the saved Due/Postponed occurrence using the payment's current reminder preferences. Failed model saves roll back; scheduling errors do not undo saved payments and can be retried in the Reminder section. App activation, direct saves, significant time changes, and backup restoration refresh the queue too.
 
-Passed reminder times schedule about two seconds later. A device-local receipt prevents repeated alerts for the same fired/dismissed occurrence whenever the app reopens. One identifier per saved payment and a serial scheduling queue prevent stale requests and duplicate reminders. The nearest 64 requests are scheduled first, reserving room for other pending notifications. When there are more, the options explain that opening the app as payments become due refreshes the queue. Reminders are one-shot: unpaid bills never advance automatically.
+Passed reminder times schedule about two seconds later. A device-local receipt prevents repeated alerts for the same fired/dismissed occurrence whenever the app reopens. Each reminder has its own identifier and delivery receipt; a serial scheduling queue prevents stale requests and duplicates. Identical timing or two already-passed times produce one alert. The nearest 64 requests are scheduled first, reserving room for other pending notifications. When there are more, the options explain that opening the app as payments become due refreshes the queue. Reminders are one-shot: unpaid bills never advance automatically.
 
-Four new scalar model attributes store each payment's enabled flag, lead days, hour, and minute, with literal defaults for automatic SwiftData migration. Backup version **3** includes these settings. Versions **1 and 2** still restore, with absent reminder settings defaulting to Off. Device permission and delivery receipts remain local. Restore removes obsolete notifications and rebuilds the queue for restored, opted-in payments. This feature uses local UserNotifications without a server or APNs registration.
+Eight defaulted scalar model attributes store the enabled flag, lead days, hour, and minute for both reminders. Backup version **4** includes both settings. Version **3** keeps its primary settings and defaults the second Off. Versions **1 and 2** still restore, with absent reminder settings defaulting to Off. Device permission and delivery receipts remain local. Restore removes obsolete notifications and rebuilds the queue for restored, opted-in payments. This feature uses local UserNotifications without a server or APNs registration.
 
 ### Check reminders on an iPhone
 
@@ -249,7 +271,7 @@ Four new scalar model attributes store each payment's enabled flag, lead days, h
 6. Revert a Paid transaction and check the Due reminder returns; repeat with a postponed bill. Dismiss an overdue reminder, then reopen several times: it should not repeatedly alert for that occurrence. Change the postponement or advance/revert the schedule and check the restored/new occurrence is eligible. Change device time zone and reopen to refresh local timing.
 7. Back up two bills with different reminder choices and restore; each should retain its own setting. Restore a version-1 or version-2 backup and verify reminders are Off. Check old requests are removed and paused bills have none. Immediately background the app after Paid/Postpone/Pause to check the short in-flight update completes.
 
-Twelve reminder unit tests cover calendar/DST timing, durable identity and settings across store reopening, real permission handling, unrelated notifications, overdue receipts, capacity, in-flight changes, retry, all actions and rollback, independent payment choices, and version-3/legacy backup handling. A UI test covers the Schedule toggle, conditional options, draft cancellation, persistent edits, details changes, and fresh Off defaults without requesting permission. Xcode builds/tests, existing-store migration, native notification delivery/taps, prompts, and background behavior still require Apple-toolchain/device verification.
+Twenty-two reminder and Undo unit tests cover calendar/DST timing, durable identity and settings across store reopening, real permission handling, unrelated notifications, overdue receipts, capacity, in-flight changes, retry, all actions and rollback, independent payment choices, version-4/legacy backup handling, both-reminder receipts, protected Undo, and stale-action checks. Three UI tests cover the Schedule toggle, conditional options, draft cancellation, persistent edits, details changes, and fresh Off defaults without requesting permission. Xcode builds/tests, existing-store migration, native notification delivery/taps, prompts, and background behavior still require Apple-toolchain/device verification.
 
 ## CSV export
 

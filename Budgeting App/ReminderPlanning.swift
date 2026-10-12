@@ -3,13 +3,15 @@ import SwiftData
 
 nonisolated struct ReminderPreferences: Codable, Equatable, Sendable {
     static let allowedLeadDays = [0, 1, 2, 3, 7]
+    static let leadDayRange = 0...365
+    static let secondDefault = ReminderPreferences(hour: 18)
     var isEnabled = false
     var daysBefore = 0
     var hour = 9
     var minute = 0
 
     var isValid: Bool {
-        Self.allowedLeadDays.contains(daysBefore) && (0...23).contains(hour) && (0...59).contains(minute)
+        Self.leadDayRange.contains(daysBefore) && (0...23).contains(hour) && (0...59).contains(minute)
     }
     var timingDescription: String {
         daysBefore == 0 ? "On the due date" : (daysBefore == 1 ? "1 day before" : "\(daysBefore) days before")
@@ -40,6 +42,7 @@ nonisolated struct RecurringReminderSnapshot: Equatable, Sendable {
     let effectiveDueDate: Date
     let isActive: Bool
     var reminder: ReminderPreferences = ReminderPreferences()
+    var secondReminder: ReminderPreferences = .secondDefault
     var occurrenceKey: String { ReminderIdentity.dateKey(scheduledDate) + "." + ReminderIdentity.dateKey(effectiveDueDate) }
 }
 
@@ -53,11 +56,12 @@ extension RecurringReminderSnapshot {
         self.init(paymentKey: ReminderIdentity.paymentKey(createdAt: payment.createdAt, modelID: modelID),
                   name: payment.name, amountText: payment.amount.formatted(.number), currency: payment.wallet?.currencyCode ?? "",
                   scheduledDate: payment.scheduledPaymentDate, effectiveDueDate: payment.nextPaymentDate, isActive: payment.isActive,
-                  reminder: payment.reminderPreferences)
+                  reminder: payment.reminderPreferences, secondReminder: payment.secondReminderPreferences)
     }
 }
 
 nonisolated struct ReminderSpecification: Equatable, Sendable {
+    let identifier: String
     let paymentKey: String
     let occurrenceKey: String
     let fingerprint: String
@@ -71,7 +75,7 @@ nonisolated struct ReminderSpecification: Equatable, Sendable {
 
 nonisolated enum ReminderPlanner {
     static func specification(for payment: RecurringReminderSnapshot, preferences override: ReminderPreferences? = nil,
-                              calendar: Calendar = .current) -> ReminderSpecification? {
+                              calendar: Calendar = .current, identifier: String? = nil) -> ReminderSpecification? {
         let preferences = override ?? payment.reminder
         guard payment.isActive, preferences.isEnabled,
               payment.effectiveDueDate.timeIntervalSinceReferenceDate.isFinite,
@@ -84,8 +88,19 @@ nonisolated enum ReminderPlanner {
         let body = "\(payment.name) • \(amount)\nDue \(payment.effectiveDueDate.formatted(date: .abbreviated, time: .omitted))"
         let fingerprint = [payment.occurrenceKey, String(preferences.daysBefore), String(preferences.hour), String(preferences.minute), ReminderIdentity.dateKey(fire), title, body]
             .map { ReminderIdentity.component($0) }.joined(separator: ".")
-        return ReminderSpecification(paymentKey: payment.paymentKey, occurrenceKey: payment.occurrenceKey,
+        return ReminderSpecification(identifier: identifier ?? payment.paymentKey,
+                                     paymentKey: payment.paymentKey, occurrenceKey: payment.occurrenceKey,
                                      fingerprint: fingerprint, title: title, body: body, logicalFireDate: fire)
+    }
+
+    static func specifications(for payment: RecurringReminderSnapshot, calendar: Calendar = .current) -> [ReminderSpecification] {
+        guard let first = specification(for: payment, calendar: calendar) else { return [] }
+        guard let second = specification(for: payment, preferences: payment.secondReminder, calendar: calendar,
+                                         identifier: payment.paymentKey + ".secondary"),
+              second.logicalFireDate != first.logicalFireDate else { return [first] }
+        // Keep the original primary ID so previously scheduled requests and
+        // delivery receipts remain valid. Both notifications route to the bill.
+        return [first, second]
     }
 
     static func fireDate(for specification: ReminderSpecification, now: Date) -> Date {

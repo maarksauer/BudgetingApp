@@ -28,6 +28,10 @@ final class RecurringPayment {
     var reminderDaysBefore: Int = 0
     var reminderHour: Int = 9
     var reminderMinute: Int = 0
+    var secondReminderEnabled: Bool = false
+    var secondReminderDaysBefore: Int = 0
+    var secondReminderHour: Int = 18
+    var secondReminderMinute: Int = 0
 
     init(
         name: String,
@@ -39,7 +43,8 @@ final class RecurringPayment {
         wallet: Wallet? = nil,
         category: SpendingCategory? = nil,
         subcategory: SpendingSubcategory? = nil,
-        reminder: ReminderPreferences = ReminderPreferences()
+        reminder: ReminderPreferences = ReminderPreferences(),
+        secondReminder: ReminderPreferences = .secondDefault
     ) {
         self.name = name
         self.amount = amount
@@ -60,6 +65,10 @@ final class RecurringPayment {
         self.reminderDaysBefore = reminder.daysBefore
         self.reminderHour = reminder.hour
         self.reminderMinute = reminder.minute
+        self.secondReminderEnabled = secondReminder.isEnabled
+        self.secondReminderDaysBefore = secondReminder.daysBefore
+        self.secondReminderHour = secondReminder.hour
+        self.secondReminderMinute = secondReminder.minute
     }
 
     var reminderPreferences: ReminderPreferences {
@@ -72,6 +81,19 @@ final class RecurringPayment {
             reminderDaysBefore = newValue.daysBefore
             reminderHour = newValue.hour
             reminderMinute = newValue.minute
+        }
+    }
+
+    var secondReminderPreferences: ReminderPreferences {
+        get {
+            ReminderPreferences(isEnabled: secondReminderEnabled, daysBefore: secondReminderDaysBefore,
+                                hour: secondReminderHour, minute: secondReminderMinute)
+        }
+        set {
+            secondReminderEnabled = newValue.isEnabled
+            secondReminderDaysBefore = newValue.daysBefore
+            secondReminderHour = newValue.hour
+            secondReminderMinute = newValue.minute
         }
     }
 

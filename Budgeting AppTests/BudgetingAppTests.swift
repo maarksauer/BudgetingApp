@@ -1497,6 +1497,7 @@ final class BudgetingAppTests: XCTestCase {
                 let payment = RecurringPayment(name: name, amount: 10, frequency: "Monthly", nextPaymentDate: date(2026, 11, 1))
                 payment.createdAt = date(2026, 10, 9)
                 payment.reminderPreferences = ReminderPreferences(isEnabled: name == "First", daysBefore: 2, hour: 7, minute: 15)
+                payment.secondReminderPreferences = ReminderPreferences(isEnabled: name == "First", daysBefore: 4, hour: 20, minute: 10)
                 context.insert(payment)
             }
             try context.save()
@@ -1509,6 +1510,7 @@ final class BudgetingAppTests: XCTestCase {
         XCTAssertEqual(reopenedKeys, keys)
         let savedPayments = try context.fetch(FetchDescriptor<RecurringPayment>())
         XCTAssertEqual(savedPayments.first(where: { $0.name == "First" })?.reminderPreferences, ReminderPreferences(isEnabled: true, daysBefore: 2, hour: 7, minute: 15))
+        XCTAssertEqual(savedPayments.first(where: { $0.name == "First" })?.secondReminderPreferences, ReminderPreferences(isEnabled: true, daysBefore: 4, hour: 20, minute: 10))
         XCTAssertFalse(try XCTUnwrap(savedPayments.first(where: { $0.name == "Second" })).reminderEnabled)
     }
 
@@ -1796,7 +1798,7 @@ final class BudgetingAppTests: XCTestCase {
         payment.reminderPreferences = settings; try source.save()
         let captured = try BackupStore.capture(context: source, appearance: .dark)
         let decoded = try AppBackup.decode(AppBackup.encode(captured))
-        XCTAssertEqual(decoded.version, 3)
+        XCTAssertEqual(decoded.version, 4)
         XCTAssertEqual(decoded.recurringPayments.first?.reminder, settings)
         let target = try backupContext()
         try BackupStore.restore(decoded, context: target)
@@ -1816,10 +1818,328 @@ final class BudgetingAppTests: XCTestCase {
         var invalid = captured
         invalid.recurringPayments[0].reminder = nil
         XCTAssertThrowsError(try BackupStore.restore(invalid, context: target))
-        invalid.recurringPayments[0].reminder = ReminderPreferences(isEnabled: true, daysBefore: 4)
+        invalid.recurringPayments[0].reminder = ReminderPreferences(isEnabled: true, daysBefore: 366)
         XCTAssertThrowsError(try BackupStore.restore(invalid, context: target))
         XCTAssertFalse(try XCTUnwrap(try target.fetch(FetchDescriptor<RecurringPayment>()).first).reminderEnabled)
         XCTAssertFalse(target.hasChanges)
+    }
+
+
+    @MainActor
+    func testSecondReminderHasIndependentCustomTimingAndMasterToggle() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Budapest")!
+        let due = calendar.date(from: DateComponents(year: 2026, month: 10, day: 26))!
+        var bill = reminderSnapshot("two", due: due,
+            reminder: ReminderPreferences(isEnabled: true, daysBefore: 4, hour: 7, minute: 25),
+            secondReminder: ReminderPreferences(isEnabled: true, daysBefore: 0, hour: 18, minute: 40))
+        let specs = ReminderPlanner.specifications(for: bill, calendar: calendar)
+        XCTAssertEqual(specs.count, 2)
+        XCTAssertEqual(specs.map(\.identifier), [bill.paymentKey, bill.paymentKey + ".secondary"])
+        XCTAssertTrue(specs.allSatisfy { $0.userInfo["paymentKey"] == bill.paymentKey && $0.occurrenceKey == bill.occurrenceKey })
+        XCTAssertEqual(calendar.dateComponents([.day, .hour, .minute], from: specs[0].logicalFireDate),
+                       DateComponents(day: 22, hour: 7, minute: 25))
+        XCTAssertEqual(calendar.dateComponents([.day, .hour, .minute], from: specs[1].logicalFireDate),
+                       DateComponents(day: 26, hour: 18, minute: 40))
+        bill.secondReminder = bill.reminder
+        XCTAssertEqual(ReminderPlanner.specifications(for: bill).count, 1)
+        bill.reminder.isEnabled = false
+        XCTAssertTrue(ReminderPlanner.specifications(for: bill).isEmpty)
+        bill.reminder.isEnabled = true; bill.secondReminder = .secondDefault
+        XCTAssertEqual(ReminderPlanner.specifications(for: bill).count, 1)
+        XCTAssertTrue(ReminderPreferences(isEnabled: true, daysBefore: 365, hour: 23, minute: 59).isValid)
+        XCTAssertFalse(ReminderPreferences(daysBefore: -1).isValid)
+        XCTAssertFalse(ReminderPreferences(daysBefore: 366).isValid)
+    }
+
+    @MainActor
+    func testSecondReminderDefaultsAndDraftSaveFailurePreserveBothChoices() throws {
+        let context = try backupContext()
+        let (wallet, category, payment) = try undoFixture(context: context)
+        XCTAssertFalse(RecurringPaymentFormDraft().secondReminder.isEnabled)
+        XCTAssertFalse(RecurringPayment(name: "New", amount: 1, frequency: "Monthly", nextPaymentDate: Date()).secondReminderEnabled)
+        var draft = RecurringPaymentFormDraft(payment: payment)
+        let original = payment.secondReminderPreferences
+        draft.secondReminder.daysBefore = 12; draft.secondReminder.hour = 21; draft.secondReminder.minute = 15
+        XCTAssertEqual(payment.secondReminderPreferences, original)
+        XCTAssertThrowsError(try FormStore.updateRecurringPayment(payment, draft: draft, context: context) { _ in throw CocoaError(.fileWriteOutOfSpace) })
+        XCTAssertEqual(payment.secondReminderPreferences, original)
+        XCTAssertFalse(context.hasChanges)
+        try FormStore.updateRecurringPayment(payment, draft: draft, context: context)
+        let fresh = ModelContext(context.container)
+        let saved = try XCTUnwrap(try fresh.fetch(FetchDescriptor<RecurringPayment>()).first)
+        XCTAssertEqual(saved.secondReminderPreferences, draft.secondReminder)
+        var off = draft.secondReminder; off.isEnabled = false
+        XCTAssertThrowsError(try FormStore.setSecondRecurringReminder(payment, preferences: off, context: context) { _ in throw CocoaError(.fileWriteOutOfSpace) })
+        XCTAssertEqual(payment.secondReminderPreferences, draft.secondReminder)
+        try FormStore.setSecondRecurringReminder(payment, preferences: off, context: context)
+        XCTAssertEqual(payment.secondReminderPreferences, off)
+        var create = RecurringPaymentFormDraft()
+        create.name = "Another"; create.details.amount = "2"; create.details.selectedWallet = wallet; create.details.selectedCategory = category
+        create.reminder.isEnabled = true; create.secondReminder = draft.secondReminder
+        let other = try FormStore.createRecurringPayment(create, context: context)
+        XCTAssertEqual(other.secondReminderPreferences, draft.secondReminder)
+        create.secondReminder.hour = 24
+        XCTAssertFalse(create.canSave)
+        XCTAssertThrowsError(try FormStore.createRecurringPayment(create, context: context))
+    }
+
+    @MainActor
+    func testBothRemindersRescheduleTogetherAndHaveSeparateDeliveryReceipts() async throws {
+        let (defaults, suite) = reminderDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let client = FakeReminderNotificationClient()
+        var clock = date(2026, 10, 1)
+        let manager = NotificationManager(client: client, defaults: defaults, now: { clock })
+        var bill = reminderSnapshot("receipts", due: date(2026, 10, 10),
+            reminder: ReminderPreferences(isEnabled: true, daysBefore: 3),
+            secondReminder: ReminderPreferences(isEnabled: true, hour: 18))
+        let secondID = bill.paymentKey + ".secondary"
+        manager.refresh(snapshots: [bill]); await manager.waitForRefresh()
+        XCTAssertEqual(client.requests.count, 2)
+        let first = try XCTUnwrap(client.requests[bill.paymentKey])
+        clock = first.logicalFireDate.addingTimeInterval(5)
+        client.requests.removeValue(forKey: bill.paymentKey)
+        client.deliveredRequests = [ScheduledReminder(identifier: bill.paymentKey, userInfo: first.userInfo)]
+        manager.refresh(snapshots: [bill]); await manager.waitForRefresh()
+        XCTAssertNil(client.requests[bill.paymentKey])
+        XCTAssertNotNil(client.requests[secondID])
+        XCTAssertEqual(client.addAttempts, 2)
+        let original = bill
+        bill = reminderSnapshot("receipts", due: date(2026, 10, 15), scheduled: original.scheduledDate,
+                               reminder: original.reminder, secondReminder: original.secondReminder)
+        manager.refresh(snapshots: [bill]); await manager.waitForRefresh()
+        XCTAssertEqual(client.requests.count, 2)
+        XCTAssertTrue(client.requests.values.allSatisfy { $0.occurrenceKey == bill.occurrenceKey })
+        XCTAssertTrue(client.deliveredRequests.isEmpty)
+        bill.secondReminder.isEnabled = false
+        manager.refresh(snapshots: [bill]); await manager.waitForRefresh()
+        XCTAssertNotNil(client.requests[bill.paymentKey]); XCTAssertNil(client.requests[secondID])
+        bill.secondReminder.isEnabled = true; bill.reminder.isEnabled = false
+        manager.refresh(snapshots: [bill]); await manager.waitForRefresh()
+        XCTAssertTrue(client.requests.isEmpty)
+    }
+
+    @MainActor
+    func testTwoReminderQueueAndOverdueCatchUpDoNotLoseOrDuplicateAlerts() async throws {
+        let (defaults, suite) = reminderDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let client = FakeReminderNotificationClient()
+        var clock = date(2026, 10, 1)
+        let bill = reminderSnapshot("queue-two", due: date(2026, 10, 10),
+            reminder: ReminderPreferences(isEnabled: true, daysBefore: 3),
+            secondReminder: ReminderPreferences(isEnabled: true, hour: 18))
+        let manager = NotificationManager(client: client, defaults: defaults, capacity: 1, now: { clock })
+        manager.refresh(snapshots: [bill]); await manager.waitForRefresh()
+        XCTAssertEqual(Set(client.requests.keys), [bill.paymentKey]); XCTAssertEqual(manager.waitingCount, 1)
+        let first = try XCTUnwrap(client.requests[bill.paymentKey])
+        clock = first.logicalFireDate.addingTimeInterval(5)
+        client.requests.removeAll()
+        manager.refresh(snapshots: [bill]); await manager.waitForRefresh()
+        XCTAssertEqual(Set(client.requests.keys), [bill.paymentKey + ".secondary"])
+        XCTAssertEqual(manager.waitingCount, 0)
+        manager.refresh(snapshots: []); await manager.waitForRefresh()
+        clock = date(2026, 10, 20)
+        client.failAdd = true
+        manager.refresh(snapshots: [bill]); await manager.waitForRefresh()
+        XCTAssertTrue(client.requests.isEmpty); XCTAssertNotNil(manager.lastError)
+        client.failAdd = false
+        manager.refresh(snapshots: [bill]); await manager.waitForRefresh()
+        XCTAssertEqual(Set(client.requests.keys), [bill.paymentKey + ".secondary"])
+        XCTAssertEqual(client.fireDates[bill.paymentKey + ".secondary"], clock.addingTimeInterval(2))
+        let attempts = client.addAttempts
+        clock = clock.addingTimeInterval(3); client.requests.removeAll()
+        let reopened = NotificationManager(client: client, defaults: defaults, now: { clock })
+        reopened.refresh(snapshots: [bill]); await reopened.waitForRefresh()
+        XCTAssertTrue(client.requests.isEmpty); XCTAssertEqual(client.addAttempts, attempts)
+    }
+
+    @MainActor
+    func testSecondReminderBackupsRoundTripAndVersionThreeKeepsPrimaryOnly() throws {
+        let context = try backupContext()
+        let (_, _, payment) = try undoFixture(context: context)
+        let snapshot = try BackupStore.capture(context: context, appearance: .system)
+        XCTAssertEqual(snapshot.version, 4)
+        let target = try backupContext()
+        try BackupStore.restore(AppBackup.decode(AppBackup.encode(snapshot)), context: target)
+        let restored = try XCTUnwrap(try target.fetch(FetchDescriptor<RecurringPayment>()).first)
+        XCTAssertEqual(restored.reminderPreferences, payment.reminderPreferences)
+        XCTAssertEqual(restored.secondReminderPreferences, payment.secondReminderPreferences)
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: AppBackup.encode(snapshot)) as? [String: Any])
+        json["version"] = 3
+        var payments = try XCTUnwrap(json["recurringPayments"] as? [[String: Any]])
+        for index in payments.indices { payments[index].removeValue(forKey: "secondReminder") }
+        json["recurringPayments"] = payments
+        let legacy = try AppBackup.decode(JSONSerialization.data(withJSONObject: json))
+        try BackupStore.restore(legacy, context: target)
+        let older = try XCTUnwrap(try target.fetch(FetchDescriptor<RecurringPayment>()).first)
+        XCTAssertEqual(older.reminderPreferences, payment.reminderPreferences)
+        XCTAssertEqual(older.secondReminderPreferences, .secondDefault)
+        var invalid = snapshot; invalid.recurringPayments[0].secondReminder = nil
+        XCTAssertThrowsError(try BackupStore.restore(invalid, context: target))
+        invalid.recurringPayments[0].secondReminder = ReminderPreferences(isEnabled: true, daysBefore: 366)
+        XCTAssertThrowsError(try BackupStore.restore(invalid, context: target))
+        XCTAssertFalse(target.hasChanges)
+    }
+
+    @MainActor
+    func testQuickUndoRestoresPaidPostponeAndSkipWithBothReminders() async throws {
+        let context = try backupContext()
+        let (wallet, category, payment) = try undoFixture(context: context)
+        let unrelated = ExpenseTransaction(amount: 7, note: "Keep this", wallet: wallet, category: category)
+        context.insert(unrelated); try context.save()
+        let (defaults, suite) = reminderDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let client = FakeReminderNotificationClient()
+        let manager = NotificationManager(client: client, defaults: defaults, now: { self.date(2025, 1, 1) })
+        payment.postponedUntil = date(2026, 10, 15); try context.save()
+        let before = RecurringUndoPaymentState(payment)
+        manager.refreshNotifications(context: context); await manager.waitForRefresh()
+        let originalReminders = client.requests
+        let originalBalance = wallet.balance(including: [])
+        for kind in [RecurringUndoKind.paid, .postponed, .skipped] {
+            let token: RecurringPaymentUndoToken
+            switch kind {
+            case .paid:
+                token = try FormStore.confirmRecurringPaymentWithUndo(payment, amount: "12,50", date: Date(), context: context)
+                XCTAssertEqual(wallet.balance(including: []), originalBalance - Decimal(string: "12.50")!)
+            case .postponed:
+                token = try FormStore.postponeRecurringPaymentWithUndo(payment, until: date(2026, 10, 20), context: context)
+            case .skipped:
+                token = try FormStore.skipRecurringPaymentWithUndo(payment, context: context)
+            }
+            manager.refreshNotifications(context: context); await manager.waitForRefresh()
+            XCTAssertNotEqual(client.requests, originalReminders)
+            XCTAssertTrue(FormStore.canUndoRecurringPaymentAction(token, context: context))
+            try FormStore.undoRecurringPaymentAction(token, context: context)
+            manager.refreshNotifications(context: context); await manager.waitForRefresh()
+            XCTAssertEqual(RecurringUndoPaymentState(payment), before)
+            XCTAssertEqual(client.requests, originalReminders)
+            XCTAssertEqual(wallet.balance(including: []), originalBalance)
+            XCTAssertEqual(try context.fetch(FetchDescriptor<ExpenseTransaction>()).map(\.note), ["Keep this"])
+            XCTAssertFalse(FormStore.canUndoRecurringPaymentAction(token, context: context))
+            XCTAssertThrowsError(try FormStore.undoRecurringPaymentAction(token, context: context))
+        }
+    }
+
+    @MainActor
+    func testQuickUndoRefusesNewerPaymentOrExpenseEditsAndDeletedRecords() throws {
+        let context = try backupContext()
+        let (_, _, payment) = try undoFixture(context: context)
+        let paid = try FormStore.confirmRecurringPaymentWithUndo(payment, amount: "10", date: Date(), context: context)
+        let transaction = try XCTUnwrap(try context.fetch(FetchDescriptor<ExpenseTransaction>()).first)
+        transaction.amount = 11; try context.save()
+        XCTAssertFalse(FormStore.canUndoRecurringPaymentAction(paid, context: context))
+        XCTAssertThrowsError(try FormStore.undoRecurringPaymentAction(paid, context: context))
+        XCTAssertEqual(transaction.amount, 11)
+        let skipped = try FormStore.skipRecurringPaymentWithUndo(payment, context: context)
+        payment.name = "Edited bill"; try context.save()
+        XCTAssertFalse(FormStore.canUndoRecurringPaymentAction(skipped, context: context))
+        XCTAssertThrowsError(try FormStore.undoRecurringPaymentAction(skipped, context: context))
+        let postponed = try FormStore.postponeRecurringPaymentWithUndo(payment, until: date(2026, 12, 20), context: context)
+        let snapshot = try BackupStore.capture(context: context, appearance: .system)
+        try BackupStore.restore(snapshot, context: context)
+        XCTAssertFalse(FormStore.canUndoRecurringPaymentAction(postponed, context: context))
+        XCTAssertThrowsError(try FormStore.undoRecurringPaymentAction(postponed, context: context))
+        let restored = try XCTUnwrap(try context.fetch(FetchDescriptor<RecurringPayment>()).first)
+        let another = try FormStore.skipRecurringPaymentWithUndo(restored, context: context)
+        try FormStore.deleteRecurringPayment(restored, context: context)
+        XCTAssertFalse(FormStore.canUndoRecurringPaymentAction(another, context: context))
+        XCTAssertThrowsError(try FormStore.undoRecurringPaymentAction(another, context: context))
+        XCTAssertEqual(try context.fetch(FetchDescriptor<ExpenseTransaction>()).count, 1)
+    }
+
+    @MainActor
+    func testFailedActionsAndUndoRollBackAndOnlySuccessfulSavesNotify() throws {
+        let context = try backupContext()
+        let (wallet, _, payment) = try undoFixture(context: context)
+        let original = RecurringUndoPaymentState(payment)
+        let events = ReminderEventCounter()
+        let observer = NotificationCenter.default.addObserver(forName: ReminderEvents.recordsChanged, object: context, queue: nil) { _ in events.increment() }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        let failing: (ModelContext) throws -> Void = { _ in throw CocoaError(.fileWriteOutOfSpace) }
+        XCTAssertThrowsError(try FormStore.confirmRecurringPaymentWithUndo(payment, amount: "10", date: Date(), context: context, commit: failing))
+        XCTAssertThrowsError(try FormStore.postponeRecurringPaymentWithUndo(payment, until: date(2026, 10, 20), context: context, commit: failing))
+        XCTAssertThrowsError(try FormStore.skipRecurringPaymentWithUndo(payment, context: context, commit: failing))
+        XCTAssertEqual(RecurringUndoPaymentState(payment), original)
+        XCTAssertEqual(events.count, 0)
+        let paid = try FormStore.confirmRecurringPaymentWithUndo(payment, amount: "10", date: Date(), context: context)
+        XCTAssertEqual(events.count, 1)
+        XCTAssertThrowsError(try FormStore.undoRecurringPaymentAction(paid, context: context, commit: failing))
+        XCTAssertEqual(RecurringUndoPaymentState(payment), paid.after)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<ExpenseTransaction>()).count, 1)
+        XCTAssertEqual(wallet.balance(including: []), 990)
+        XCTAssertTrue(FormStore.canUndoRecurringPaymentAction(paid, context: context))
+        XCTAssertFalse(context.hasChanges); XCTAssertEqual(events.count, 1)
+        try FormStore.undoRecurringPaymentAction(paid, context: context)
+        XCTAssertEqual(RecurringUndoPaymentState(payment), original)
+        XCTAssertEqual(wallet.balance(including: []), 1000)
+        XCTAssertEqual(events.count, 2)
+    }
+
+    @MainActor
+    func testQuickUndoControllerKeepsLatestActionAndRetainsFailedUndoForRetry() throws {
+        let context = try backupContext()
+        let (_, _, payment) = try undoFixture(context: context)
+        let controller = RecurringUndoController()
+        let first = try FormStore.postponeRecurringPaymentWithUndo(payment, until: date(2026, 10, 15), context: context)
+        controller.record(first)
+        let second = try FormStore.skipRecurringPaymentWithUndo(payment, context: context)
+        controller.record(second)
+        XCTAssertEqual(controller.token?.id, second.id)
+        XCTAssertFalse(FormStore.canUndoRecurringPaymentAction(first, context: context))
+        controller.undo(context: context) { _ in throw CocoaError(.fileWriteOutOfSpace) }
+        XCTAssertEqual(controller.token?.id, second.id); XCTAssertNotNil(controller.error)
+        controller.error = nil
+        controller.undo(context: context)
+        XCTAssertNil(controller.token)
+        XCTAssertEqual(payment.postponedUntil, first.after.postponedUntil)
+        let third = try FormStore.skipRecurringPaymentWithUndo(payment, context: context)
+        controller.record(third)
+        try FormStore.setRecurringPaymentActive(payment, active: false, context: context)
+        controller.validate(context: context)
+        XCTAssertNil(controller.token)
+        controller.record(third); controller.dismiss()
+        XCTAssertNil(controller.token)
+    }
+
+    @MainActor
+    func testRapidPaidAndUndoRefreshRestoresOverdueRemindersBeforeWorkerRuns() async throws {
+        let context = try backupContext()
+        let (_, _, payment) = try undoFixture(context: context)
+        let (defaults, suite) = reminderDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let client = FakeReminderNotificationClient()
+        let clock = date(2026, 10, 20)
+        let manager = NotificationManager(client: client, defaults: defaults, now: { clock })
+        manager.refreshNotifications(context: context); await manager.waitForRefresh()
+        let delivered = try XCTUnwrap(client.requests.values.first)
+        client.requests.removeAll()
+        client.deliveredRequests = [ScheduledReminder(identifier: delivered.identifier, userInfo: delivered.userInfo)]
+        manager.refreshNotifications(context: context); await manager.waitForRefresh()
+        XCTAssertTrue(client.requests.isEmpty)
+        let paid = try FormStore.confirmRecurringPaymentWithUndo(payment, amount: "10", date: Date(), context: context)
+        manager.refreshNotifications(context: context)
+        try FormStore.undoRecurringPaymentAction(paid, context: context)
+        manager.refreshNotifications(context: context)
+        await manager.waitForRefresh()
+        XCTAssertEqual(client.requests.count, 1)
+        XCTAssertEqual(client.requests.values.first?.occurrenceKey, RecurringReminderSnapshot(payment: payment).occurrenceKey)
+        XCTAssertTrue(client.deliveredRequests.isEmpty)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<ExpenseTransaction>()).count, 0)
+    }
+
+    @MainActor
+    private func undoFixture(context: ModelContext) throws -> (Wallet, SpendingCategory, RecurringPayment) {
+        let wallet = Wallet(name: "Bank", startingBalance: 1000, currencyCode: "EUR", walletType: "Bank Account")
+        let category = SpendingCategory(name: "Bills", icon: "doc.text.fill", colorName: "blue")
+        context.insert(wallet); context.insert(category)
+        let payment = RecurringPayment(name: "Rent", amount: 10, frequency: "Monthly", nextPaymentDate: date(2026, 10, 10),
+            wallet: wallet, category: category,
+            reminder: ReminderPreferences(isEnabled: true, daysBefore: 4, hour: 7, minute: 25),
+            secondReminder: ReminderPreferences(isEnabled: true, hour: 18))
+        context.insert(payment); try context.save()
+        return (wallet, category, payment)
     }
 
 
@@ -1830,9 +2150,10 @@ final class BudgetingAppTests: XCTestCase {
         return (defaults, suite)
     }
 
-    private func reminderSnapshot(_ key: String, due: Date, scheduled: Date? = nil, active: Bool = true, reminder: ReminderPreferences = ReminderPreferences(isEnabled: true)) -> RecurringReminderSnapshot {
+    private func reminderSnapshot(_ key: String, due: Date, scheduled: Date? = nil, active: Bool = true, reminder: ReminderPreferences = ReminderPreferences(isEnabled: true), secondReminder: ReminderPreferences = .secondDefault) -> RecurringReminderSnapshot {
         RecurringReminderSnapshot(paymentKey: ReminderIdentity.prefix + key, name: "Rent", amountText: "4,990", currency: "HUF",
-                                  scheduledDate: scheduled ?? due, effectiveDueDate: due, isActive: active, reminder: reminder)
+                                  scheduledDate: scheduled ?? due, effectiveDueDate: due, isActive: active,
+                                  reminder: reminder, secondReminder: secondReminder)
     }
 
     private var utcCalendar: Calendar {
@@ -1862,7 +2183,7 @@ private final class FakeReminderNotificationClient: ReminderNotificationClient {
     func authorizationStatus() async -> ReminderAuthorization { status }
     func requestPermission() async throws -> Bool { permissionRequests += 1; return status == .allowed }
     func pending() async -> [ScheduledReminder] {
-        unrelated + requests.values.map { ScheduledReminder(identifier: $0.paymentKey, userInfo: $0.userInfo) }
+        unrelated + requests.values.map { ScheduledReminder(identifier: $0.identifier, userInfo: $0.userInfo) }
     }
     func delivered() async -> [ScheduledReminder] { deliveredRequests }
     func add(_ specification: ReminderSpecification, fireDate: Date) async throws {
@@ -1872,7 +2193,7 @@ private final class FakeReminderNotificationClient: ReminderNotificationClient {
             await withCheckedContinuation { continuation in suspendedAdd = continuation; onAddStarted?() }
         }
         if failAdd { throw CocoaError(.fileWriteUnknown) }
-        requests[specification.paymentKey] = specification; fireDates[specification.paymentKey] = fireDate
+        requests[specification.identifier] = specification; fireDates[specification.identifier] = fireDate
     }
     func resumeAdd() { suspendedAdd?.resume(); suspendedAdd = nil }
     func removePending(_ identifiers: [String]) {

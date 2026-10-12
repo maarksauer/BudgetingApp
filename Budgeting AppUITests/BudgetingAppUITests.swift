@@ -72,6 +72,114 @@ final class BudgetingAppUITests: XCTestCase {
     }
 
     @MainActor
+    func testSecondReminderCustomDaysSaveCancelAndMasterToggle() {
+        continueAfterFailure = false
+        let app = XCUIApplication(); app.launch()
+        let wallet = createFormTestWallet(in: app)
+        app.buttons["tabMore"].tap(); app.buttons["openRecurringPayments"].tap()
+        app.buttons["openCreateRecurringPayment"].tap()
+        let master = app.switches["recurringFormReminderEnabled"]
+        scrollToFormElement(master, in: app); master.tap()
+        let second = app.switches["recurringSecondReminderEnabled"]
+        scrollToFormElement(second, in: app)
+        XCTAssertEqual(second.value as? String, "0")
+        let lead = app.buttons["recurringSecondReminderLeadDays"]
+        XCTAssertFalse(lead.exists)
+        second.tap(); scrollToFormElement(lead, in: app); lead.tap()
+        app.buttons["Custom…"].tap()
+        let days = app.steppers["recurringSecondReminderCustomDays"]
+        scrollToFormElement(days, in: app)
+        let increase = days.buttons["Increment"]
+        for _ in 0..<4 { increase.tap() }
+        let summary = app.staticTexts["recurringSecondReminderTimingSummary"]
+        scrollToFormElement(summary, in: app)
+        XCTAssertTrue(summary.label.hasPrefix("4 days before at "))
+        XCTAssertTrue(app.descendants(matching: .any)["recurringSecondReminderTime"].firstMatch.exists)
+        scrollToFormElement(master, in: app, upward: false); master.tap()
+        XCTAssertFalse(lead.exists); master.tap()
+        scrollToFormElement(second, in: app)
+        XCTAssertEqual(second.value as? String, "1")
+        scrollToFormElement(summary, in: app)
+        XCTAssertTrue(summary.label.hasPrefix("4 days before at "))
+        let paymentName = "UI second \(UUID().uuidString.prefix(8))"
+        let name = app.textFields["recurringFormName"]
+        scrollToFormElement(name, in: app, upward: false); name.tap(); name.typeText(paymentName + "\n")
+        app.textFields["recurringFormAmount"].typeText("5")
+        app.buttons["recurringFormKeyboardDone"].tap()
+        chooseFormWallet(wallet, prefix: "recurringForm", in: app)
+        app.buttons["createRecurringPayment"].tap()
+        let row = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", paymentName)).firstMatch
+        scrollToFormElement(row, in: app); row.tap()
+        scrollToFormElement(summary, in: app)
+        XCTAssertTrue(summary.label.hasPrefix("4 days before at "))
+        app.buttons["editRecurringPayment"].tap()
+        scrollToFormElement(second, in: app, upward: false); second.tap()
+        XCTAssertFalse(lead.exists)
+        app.buttons["cancelRecurringForm"].tap()
+        scrollToFormElement(second, in: app)
+        XCTAssertEqual(second.value as? String, "1")
+        let savedMaster = app.switches["recurringPaymentReminderEnabled"]
+        scrollToFormElement(savedMaster, in: app, upward: false); savedMaster.tap()
+        XCTAssertFalse(lead.exists); savedMaster.tap()
+        scrollToFormElement(summary, in: app)
+        XCTAssertTrue(summary.label.hasPrefix("4 days before at "))
+        app.navigationBars[paymentName].buttons["Recurring Payments"].tap()
+        app.buttons["openCreateRecurringPayment"].tap()
+        scrollToFormElement(master, in: app); master.tap()
+        scrollToFormElement(second, in: app)
+        XCTAssertEqual(second.value as? String, "0")
+        app.buttons["cancelRecurringForm"].tap()
+    }
+
+    @MainActor
+    func testQuickUndoPaidPostponeAndSkipRemainsAboveDock() {
+        continueAfterFailure = false
+        let app = XCUIApplication(); app.launch()
+        let wallet = createFormTestWallet(in: app)
+        app.buttons["tabMore"].tap(); app.buttons["openRecurringPayments"].tap()
+        app.buttons["openCreateRecurringPayment"].tap()
+        let paymentName = "UI undo \(UUID().uuidString.prefix(8))"
+        let name = app.textFields["recurringFormName"]
+        name.tap(); name.typeText(paymentName + "\n")
+        app.textFields["recurringFormAmount"].typeText("5")
+        app.buttons["recurringFormKeyboardDone"].tap()
+        chooseFormWallet(wallet, prefix: "recurringForm", in: app)
+        app.buttons["createRecurringPayment"].tap()
+        let row = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", paymentName)).firstMatch
+        scrollToFormElement(row, in: app); row.tap()
+        let paid = app.buttons["openConfirmPayment"]
+        scrollToFormElement(paid, in: app); paid.tap()
+        app.buttons["confirmRecurringPayment"].tap()
+        assertQuickUndoAndTap(in: app)
+        scrollToFormElement(paid, in: app)
+        XCTAssertTrue(paid.isHittable)
+        let postpone = app.buttons["postponeRecurringPayment"]
+        scrollToFormElement(postpone, in: app); postpone.tap()
+        app.buttons["1 Day"].tap()
+        assertQuickUndoAndTap(in: app)
+        scrollToFormElement(paid, in: app)
+        XCTAssertTrue(paid.isHittable)
+        let skip = app.buttons["skipRecurringPayment"]
+        scrollToFormElement(skip, in: app); skip.tap()
+        app.alerts["Skip This Payment?"].buttons["Skip"].tap()
+        assertQuickUndoAndTap(in: app)
+        scrollToFormElement(paid, in: app)
+        XCTAssertTrue(paid.isHittable)
+    }
+
+    @MainActor
+    private func assertQuickUndoAndTap(in app: XCUIApplication) {
+        let undo = app.buttons["undoRecurringAction"]
+        XCTAssertTrue(undo.waitForExistence(timeout: 5)); XCTAssertTrue(undo.isHittable)
+        let dock = app.descendants(matching: .any)["mainDock"].firstMatch
+        XCTAssertTrue(dock.exists)
+        XCTAssertLessThanOrEqual(undo.frame.maxY, dock.frame.minY)
+        undo.tap()
+        XCTAssertFalse(undo.exists)
+    }
+
+
+    @MainActor
     func testLaunchOnCentralAddTabAndOverviewNavigation() {
         continueAfterFailure = false
         let app = XCUIApplication()

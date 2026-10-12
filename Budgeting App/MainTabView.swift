@@ -42,6 +42,7 @@ struct MainTabView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var notificationManager = NotificationManager.shared
+    @StateObject private var recurringUndo = RecurringUndoController()
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var selectedTab: AppTab = .add
     @State private var expenseDraft = ExpenseDraft()
@@ -88,24 +89,37 @@ struct MainTabView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
 
+            RecurringUndoBanner(controller: recurringUndo)
             if !keyboardIsVisible {
                 dock
             }
         }
+        .environmentObject(recurringUndo)
+        .alert("Couldn’t undo payment", isPresented: Binding(
+            get: { recurringUndo.error != nil },
+            set: { visible in if !visible { recurringUndo.error = nil } }
+        )) {
+            Button("OK", role: .cancel) { recurringUndo.error = nil }
+        } message: { Text(recurringUndo.error ?? "Please try again.") }
         .task {
             notificationManager.refreshNotifications(context: modelContext)
             openReminderIfNeeded()
         }
         .onChange(of: notificationManager.openRequest) { _, _ in openReminderIfNeeded() }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { notificationManager.refreshNotifications(context: modelContext); openReminderIfNeeded() }
+            if phase == .active {
+                notificationManager.refreshNotifications(context: modelContext); openReminderIfNeeded()
+                recurringUndo.validate(context: modelContext)
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: ReminderEvents.recordsChanged)) { _ in
             notificationManager.refreshNotifications(context: modelContext)
+            recurringUndo.validate(context: modelContext)
         }
         .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
             // Direct saves/autosaves also cover wallet deletion or renaming.
             notificationManager.refreshNotifications(context: modelContext)
+            recurringUndo.validate(context: modelContext)
         }
         #if os(iOS) || os(visionOS)
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in

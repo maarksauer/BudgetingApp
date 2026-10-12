@@ -56,11 +56,13 @@ struct RecurringPaymentFormDraft {
     var frequency = "Monthly"
     var scheduledDate = Date()
     var reminder = ReminderPreferences()
+    var secondReminder: ReminderPreferences = .secondDefault
 
     var cleanedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
     var canSave: Bool {
         !cleanedName.isEmpty && details.hasRequiredFields && !details.isIncome &&
-        RecurringSchedule.frequencies.contains(frequency) && scheduledDate.timeIntervalSinceReferenceDate.isFinite && reminder.isValid
+        RecurringSchedule.frequencies.contains(frequency) && scheduledDate.timeIntervalSinceReferenceDate.isFinite &&
+        reminder.isValid && secondReminder.isValid
     }
 
     init() { }
@@ -74,6 +76,7 @@ struct RecurringPaymentFormDraft {
         frequency = payment.frequency
         scheduledDate = payment.scheduledPaymentDate
         reminder = payment.reminderPreferences
+        secondReminder = payment.secondReminderPreferences
     }
 }
 
@@ -248,7 +251,7 @@ struct RecurringPaymentFormFields: View {
                 .font(.caption).foregroundStyle(.secondary)
         }
         if draft.reminder.isEnabled {
-            PaymentReminderOptions(settings: $draft.reminder)
+            PaymentReminderOptions(settings: $draft.reminder, secondSettings: $draft.secondReminder)
         }
         TransactionSelectionSections(draft: $draft.details, wallets: wallets, categories: categories, prefix: "recurringForm")
         Section("Note") {

@@ -4,6 +4,7 @@ import SwiftData
 struct RecurringPaymentsView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var recurringUndo: RecurringUndoController
     @State private var showingSaveError = false
     @State private var showingPostponeError = false
     @State private var saveError = ""
@@ -693,7 +694,7 @@ struct RecurringPaymentsView: View {
     private func postponeSelectedPayment(_ payment: RecurringPayment, byDays days: Int) {
         let start = max(payment.nextPaymentDate, Date())
         if let date = Calendar.current.date(byAdding: .day, value: days, to: start) {
-            do { try FormStore.postponeRecurringPayment(payment, until: date, context: modelContext) }
+            do { recurringUndo.record(try FormStore.postponeRecurringPaymentWithUndo(payment, until: date, context: modelContext)) }
             catch { saveError = error.localizedDescription; showingSaveError = true }
         }
         paymentToPostpone = nil
@@ -709,13 +710,13 @@ struct RecurringPaymentsView: View {
     private func applyCustomPostponeDate() {
         guard let payment = paymentToPostpone else { return }
         do {
-            try FormStore.postponeRecurringPayment(payment, until: customPostponeDate, context: modelContext)
+            recurringUndo.record(try FormStore.postponeRecurringPaymentWithUndo(payment, until: customPostponeDate, context: modelContext))
             paymentToPostpone = nil; showingCustomPostponeDate = false
         } catch { saveError = error.localizedDescription; showingPostponeError = true }
     }
 
     private func skipSelectedPayment(_ payment: RecurringPayment) {
-        do { try FormStore.skipRecurringPayment(payment, context: modelContext) }
+        do { recurringUndo.record(try FormStore.skipRecurringPaymentWithUndo(payment, context: modelContext)) }
         catch { saveError = error.localizedDescription; showingSaveError = true }
         paymentToSkip = nil
     }

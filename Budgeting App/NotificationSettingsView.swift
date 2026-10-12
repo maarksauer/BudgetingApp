@@ -8,66 +8,66 @@ import AppKit
 
 struct PaymentReminderOptions: View {
     @Binding var settings: ReminderPreferences
+    @Binding var secondSettings: ReminderPreferences
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var manager = NotificationManager.shared
     @State private var requestingPermission = false
 
     var body: some View {
-        Section {
-            Picker("Remind Me", selection: $settings.daysBefore) {
-                ForEach(ReminderPreferences.allowedLeadDays, id: \.self) { days in
-                    Text(days == 0 ? "On the due date" : (days == 1 ? "1 day before" : "\(days) days before")).tag(days)
+        Group {
+            Section {
+                ReminderTimingFields(settings: $settings, prefix: "recurringReminder")
+                Toggle("Second Reminder", isOn: $secondSettings.isEnabled)
+                    .accessibilityIdentifier("recurringSecondReminderEnabled")
+
+                ReadableDetailRow(title: "Notifications", value: permissionText)
+                    .accessibilityIdentifier("reminderAuthorizationStatus")
+                if manager.permission == .notDetermined {
+                    Button("Enable Notifications", action: enableNotifications)
+                        .disabled(requestingPermission).accessibilityIdentifier("enableRecurringNotifications")
+                } else if manager.permission == .denied {
+                    Text("Allow notifications in your device settings to receive this reminder.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Button("Open Notification Settings", action: openSystemSettings)
+                        .accessibilityIdentifier("openSystemNotificationSettings")
+                } else if manager.permission == .unknown {
+                    Button("Check Notification Status") { checkPermission() }
+                }
+                if let error = manager.lastError {
+                    Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+                    Button("Try Again") { manager.refreshNotifications(context: modelContext) }
+                }
+                if manager.waitingCount > 0 {
+                    Text("The nearest payments are scheduled first. Open the app as payments become due to refresh later reminders.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("Reminder")
+            } footer: {
+                Text("\(settings.timingDescription) at \(ReminderTimingFields.timeText(settings)), using your device’s local time. A postponement moves both reminders. Tap either notification to open this payment and confirm Paid.")
+                    .accessibilityIdentifier("recurringReminderTimingSummary")
+            }
+            if secondSettings.isEnabled {
+                Section {
+                    ReminderTimingFields(settings: $secondSettings, prefix: "recurringSecondReminder")
+                    if settings.daysBefore == secondSettings.daysBefore && settings.hour == secondSettings.hour && settings.minute == secondSettings.minute {
+                        Text("Both reminders use the same timing, so you’ll receive one notification.")
+                            .font(.caption).foregroundStyle(.secondary)
+                            .accessibilityIdentifier("recurringReminderDuplicateTiming")
+                    }
+                } header: {
+                    Text("Second Reminder")
+                } footer: {
+                    Text("\(secondSettings.timingDescription) at \(ReminderTimingFields.timeText(secondSettings)). Turning off Reminder in Schedule stops both reminders and keeps your timing choices.")
+                        .accessibilityIdentifier("recurringSecondReminderTimingSummary")
                 }
             }
-            .pickerStyle(.menu).accessibilityIdentifier("recurringReminderLeadDays")
-
-            DatePicker("Time", selection: Binding(
-                get: { Calendar.current.date(bySettingHour: settings.hour, minute: settings.minute, second: 0, of: Date()) ?? Date() },
-                set: { date in
-                    var updated = settings
-                    updated.hour = Calendar.current.component(.hour, from: date)
-                    updated.minute = Calendar.current.component(.minute, from: date)
-                    settings = updated
-                }
-            ), displayedComponents: .hourAndMinute)
-            .accessibilityIdentifier("recurringReminderTime")
-
-            ReadableDetailRow(title: "Notifications", value: permissionText)
-                .accessibilityIdentifier("reminderAuthorizationStatus")
-            if manager.permission == .notDetermined {
-                Button("Enable Notifications", action: enableNotifications)
-                    .disabled(requestingPermission).accessibilityIdentifier("enableRecurringNotifications")
-            } else if manager.permission == .denied {
-                Text("Allow notifications in your device settings to receive this reminder.")
-                    .font(.caption).foregroundStyle(.secondary)
-                Button("Open Notification Settings", action: openSystemSettings)
-                    .accessibilityIdentifier("openSystemNotificationSettings")
-            } else if manager.permission == .unknown {
-                Button("Check Notification Status") { checkPermission() }
-            }
-            if let error = manager.lastError {
-                Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
-                Button("Try Again") { manager.refreshNotifications(context: modelContext) }
-            }
-            if manager.waitingCount > 0 {
-                Text("The nearest payments are scheduled first. Open the app as payments become due to refresh later reminders.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-        } header: {
-            Text("Reminder")
-        } footer: {
-            Text("\(settings.timingDescription) at \(timeText), using your device’s local time. A postponement moves this reminder too. Tap the notification to open this payment and confirm Paid.")
-                .accessibilityIdentifier("recurringReminderTimingSummary")
         }
         .task { _ = await manager.authorizationStatus() }
         .onChange(of: scenePhase) { _, phase in if phase == .active { checkPermission() } }
     }
 
-    private var timeText: String {
-        (Calendar.current.date(bySettingHour: settings.hour, minute: settings.minute, second: 0, of: Date()) ?? Date())
-            .formatted(date: .omitted, time: .shortened)
-    }
     private var permissionText: String {
         switch manager.permission {
         case .allowed: "Enabled"
@@ -95,6 +95,51 @@ struct PaymentReminderOptions: View {
         #elseif os(macOS)
         if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") { NSWorkspace.shared.open(url) }
         #endif
+    }
+}
+
+private struct ReminderTimingFields: View {
+    @Binding var settings: ReminderPreferences
+    let prefix: String
+    @State private var usingCustomLead = false
+
+    var body: some View {
+        Picker("Remind Me", selection: Binding(
+            get: { usingCustomLead || !ReminderPreferences.allowedLeadDays.contains(settings.daysBefore) ? -1 : settings.daysBefore },
+            set: { days in
+                usingCustomLead = days == -1
+                if days >= 0 { settings.daysBefore = days }
+            }
+        )) {
+            ForEach(ReminderPreferences.allowedLeadDays, id: \.self) { days in
+                Text(days == 0 ? "On the due date" : (days == 1 ? "1 day before" : "\(days) days before")).tag(days)
+            }
+            Text("Custom…").tag(-1)
+        }
+        .pickerStyle(.menu).accessibilityIdentifier(prefix + "LeadDays")
+        if usingCustomLead || !ReminderPreferences.allowedLeadDays.contains(settings.daysBefore) {
+            Stepper(value: $settings.daysBefore, in: ReminderPreferences.leadDayRange) {
+                Text(settings.daysBefore == 0 ? "On the due date" : "\(settings.daysBefore) days before")
+            }
+            .accessibilityLabel("Days before due date")
+            .accessibilityValue(String(settings.daysBefore))
+            .accessibilityIdentifier(prefix + "CustomDays")
+        }
+        DatePicker("Time", selection: Binding(
+            get: { Calendar.current.date(bySettingHour: settings.hour, minute: settings.minute, second: 0, of: Date()) ?? Date() },
+            set: { date in
+                var updated = settings
+                updated.hour = Calendar.current.component(.hour, from: date)
+                updated.minute = Calendar.current.component(.minute, from: date)
+                settings = updated
+            }
+        ), displayedComponents: .hourAndMinute)
+        .accessibilityIdentifier(prefix + "Time")
+    }
+
+    static func timeText(_ settings: ReminderPreferences) -> String {
+        (Calendar.current.date(bySettingHour: settings.hour, minute: settings.minute, second: 0, of: Date()) ?? Date())
+            .formatted(date: .omitted, time: .shortened)
     }
 }
 

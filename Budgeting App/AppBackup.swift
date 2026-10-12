@@ -5,7 +5,7 @@ import SwiftData
 // the file boundary; IDs below link records within this particular backup.
 nonisolated enum AppBackup {
     static let format = "BudgetingAppBackup"
-    static let version = 3
+    static let version = 4
     static let maximumBytes = 32 * 1024 * 1024
     static let maximumRecords = 100_000
     static let restoreRevisionKey = "dataRestoreRevision"
@@ -99,6 +99,8 @@ nonisolated enum AppBackup {
         var createdAt: Date
         // Versions 1 and 2 omit this field and restore reminders as Off.
         var reminder: ReminderPreferences? = nil
+        // Version 3 retains the primary reminder and defaults this one to Off.
+        var secondReminder: ReminderPreferences? = nil
     }
 
     nonisolated struct TransactionRecord: Codable, Sendable, Identifiable {
@@ -224,6 +226,12 @@ nonisolated enum AppBackup {
             }
             if let reminder = record.reminder, !reminder.isValid {
                 throw BackupError.invalid("A recurring payment has invalid reminder timing.")
+            }
+            if snapshot.version >= 4 && record.secondReminder == nil {
+                throw BackupError.invalid("A recurring payment is missing its second reminder settings.")
+            }
+            if let reminder = record.secondReminder, !reminder.isValid {
+                throw BackupError.invalid("A recurring payment has invalid second reminder timing.")
             }
             try nonnegative(record.amount)
             try reference(record.walletID, in: wallets)
@@ -369,7 +377,7 @@ enum BackupStore {
                     postponedUntil: payment.postponedUntil, note: payment.note, isActive: payment.isActive,
                     walletID: try id(payment.wallet, in: walletIDs), categoryID: try id(payment.category, in: categoryIDs),
                     subcategoryID: try id(payment.subcategory, in: subcategoryIDs), createdAt: payment.createdAt,
-                    reminder: payment.reminderPreferences)
+                    reminder: payment.reminderPreferences, secondReminder: payment.secondReminderPreferences)
             },
             transactions: transactions.map { transaction in
                 AppBackup.TransactionRecord(id: UUID(), isIncome: transaction.isIncome, amount: amount(transaction.amount),
@@ -471,7 +479,7 @@ enum BackupStore {
                 frequency: record.frequency, nextPaymentDate: record.scheduledPaymentDate, note: record.note,
                 isActive: record.isActive, wallet: record.walletID.flatMap { wallets[$0] },
                 category: record.categoryID.flatMap { categories[$0] }, subcategory: record.subcategoryID.flatMap { subcategories[$0] },
-                reminder: record.reminder ?? ReminderPreferences())
+                reminder: record.reminder ?? ReminderPreferences(), secondReminder: record.secondReminder ?? .secondDefault)
             model.createdAt = record.createdAt
             model.postponedUntil = record.postponedUntil
             context.insert(model)

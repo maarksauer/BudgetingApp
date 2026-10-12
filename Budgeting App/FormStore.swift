@@ -81,6 +81,11 @@ enum FormStore {
         } catch { context.rollback(); throw error }
     }
 
+    static func performRecurringUndo(context: ModelContext, commit: (ModelContext) throws -> Void,
+                                     changes: () throws -> Void) throws {
+        try perform(context: context, commit: commit, changes: changes)
+    }
+
     @discardableResult
     static func createWallet(_ draft: WalletFormDraft, context: ModelContext,
                              commit: (ModelContext) throws -> Void = { try $0.save() }) throws -> Wallet {
@@ -212,7 +217,8 @@ extension FormStore {
             let payment = RecurringPayment(name: draft.cleanedName, amount: total, frequency: draft.frequency,
                                            nextPaymentDate: draft.scheduledDate, note: draft.details.cleanedNote,
                                            wallet: draft.details.selectedWallet, category: draft.details.selectedCategory,
-                                           subcategory: draft.details.subcategory, reminder: draft.reminder)
+                                           subcategory: draft.details.subcategory, reminder: draft.reminder,
+                                           secondReminder: draft.secondReminder)
             context.insert(payment)
             return payment
         }
@@ -233,6 +239,7 @@ extension FormStore {
             payment.category = draft.details.selectedCategory
             payment.subcategory = draft.details.subcategory
             payment.reminderPreferences = draft.reminder
+            payment.secondReminderPreferences = draft.secondReminder
             if !Calendar.current.isDate(previousDate, inSameDayAs: draft.scheduledDate) {
                 payment.postponedUntil = nil
             }
@@ -272,6 +279,12 @@ extension FormStore {
                                      commit: (ModelContext) throws -> Void = { try $0.save() }) throws {
         guard preferences.isValid else { throw SaveError.invalidFields }
         try perform(context: context, commit: commit) { payment.reminderPreferences = preferences }
+    }
+
+    static func setSecondRecurringReminder(_ payment: RecurringPayment, preferences: ReminderPreferences, context: ModelContext,
+                                          commit: (ModelContext) throws -> Void = { try $0.save() }) throws {
+        guard preferences.isValid else { throw SaveError.invalidFields }
+        try perform(context: context, commit: commit) { payment.secondReminderPreferences = preferences }
     }
 
     static func postponeRecurringPayment(_ payment: RecurringPayment, until date: Date, context: ModelContext,

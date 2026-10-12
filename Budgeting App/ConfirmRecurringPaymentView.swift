@@ -4,6 +4,7 @@ import SwiftData
 struct ConfirmRecurringPaymentView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var recurringUndo: RecurringUndoController
     @Query private var transfers: [WalletTransfer]
     let payment: RecurringPayment
     @State private var draft: ExpenseDraft
@@ -86,7 +87,8 @@ struct ConfirmRecurringPaymentView: View {
         guard canConfirm, !isSaving else { return }
         focusedField = nil; isSaving = true
         do {
-            try FormStore.confirmRecurringPayment(payment, amount: draft.amount, date: draft.transactionDate, context: modelContext)
+            let undo = try FormStore.confirmRecurringPaymentWithUndo(payment, amount: draft.amount, date: draft.transactionDate, context: modelContext)
+            recurringUndo.record(undo)
             dismiss()
         } catch {
             isSaving = false; saveError = error.localizedDescription; showingSaveError = true

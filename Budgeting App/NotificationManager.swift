@@ -68,7 +68,7 @@ final class SystemReminderNotificationClient: ReminderNotificationClient {
         var components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: fireDate)
         components.calendar = Calendar.current; components.timeZone = .current
         let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
-        try await center.add(UNNotificationRequest(identifier: specification.paymentKey, content: content, trigger: trigger))
+        try await center.add(UNNotificationRequest(identifier: specification.identifier, content: content, trigger: trigger))
     }
     func removePending(_ identifiers: [String]) { if !identifiers.isEmpty { center.removePendingNotificationRequests(withIdentifiers: identifiers) } }
     func removeDelivered(_ identifiers: [String]) { if !identifiers.isEmpty { center.removeDeliveredNotifications(withIdentifiers: identifiers) } }
@@ -131,6 +131,7 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
 
     func scheduleDueNotification(for payment: RecurringPayment) {
         let snapshot = RecurringReminderSnapshot(payment: payment)
+        clearChangedOccurrence(snapshot)
         snapshots[snapshot.paymentKey] = snapshot
         enqueue()
     }
@@ -148,8 +149,19 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
 
     // Immutable snapshots keep SwiftData objects out of asynchronous callbacks.
     func refresh(snapshots values: [RecurringReminderSnapshot]) {
+        for value in values { clearChangedOccurrence(value) }
         snapshots = Dictionary(values.map { ($0.paymentKey, $0) }, uniquingKeysWith: { _, latest in latest })
         enqueue()
+    }
+
+    private func clearChangedOccurrence(_ value: RecurringReminderSnapshot) {
+        guard let previous = snapshots[value.paymentKey], previous.occurrenceKey != value.occurrenceKey else { return }
+        let identifiers = [value.paymentKey, value.paymentKey + ".secondary"]
+        client.removePending(identifiers); client.removeDelivered(identifiers)
+        for identifier in identifiers { receipts.removeValue(forKey: identifier) }
+        // A rapid Paid → Undo may be coalesced into a single async refresh.
+        // Invalidate the old occurrence immediately so the restored state gets
+        // its reminders even when the intermediate refresh never finished.
     }
 
     private func enqueue() {
@@ -197,8 +209,8 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
         let delivered = await client.delivered()
         guard revision == current else { return }
         let specifications = status == .allowed
-            ? values.compactMap { ReminderPlanner.specification(for: $0) } : []
-        let desired = Dictionary(specifications.map { ($0.paymentKey, $0) }, uniquingKeysWith: { _, last in last })
+            ? values.flatMap { ReminderPlanner.specifications(for: $0) } : []
+        let desired = Dictionary(specifications.map { ($0.identifier, $0) }, uniquingKeysWith: { _, last in last })
         let ownPending = pending.filter { $0.identifier.hasPrefix(ReminderIdentity.prefix) }
         let ownDelivered = delivered.filter { $0.identifier.hasPrefix(ReminderIdentity.prefix) }
         let pendingByID = Dictionary(ownPending.map { ($0.identifier, $0) }, uniquingKeysWith: { _, last in last })
@@ -216,19 +228,26 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
                 receipts[notification.identifier] = ReminderReceipt(occurrenceKey: target.occurrenceKey, fireDate: date)
             }
         }
-        let candidates = specifications.filter { spec in
-            if let pending = pendingByID[spec.paymentKey], pending.userInfo["fingerprint"] == spec.fingerprint { return true }
+        let eligible = specifications.filter { spec in
+            if let pending = pendingByID[spec.identifier], pending.userInfo["fingerprint"] == spec.fingerprint { return true }
             // Once the same occurrence has fired, opening the app (or dismissing
             // its notification) must not keep creating overdue alerts.
-            if let receipt = receipts[spec.paymentKey], receipt.occurrenceKey == spec.occurrenceKey, receipt.fireDate <= date,
-               pendingByID[spec.paymentKey] == nil { return false }
+            if let receipt = receipts[spec.identifier], receipt.occurrenceKey == spec.occurrenceKey, receipt.fireDate <= date,
+               pendingByID[spec.identifier] == nil { return false }
             return true
+        }
+        // If both times are already past (for example on first opting in), send
+        // one catch-up alert rather than two simultaneous overdue notifications.
+        let overdue = Dictionary(grouping: eligible.filter { $0.logicalFireDate <= date }, by: \.paymentKey)
+        let latestOverdue = overdue.mapValues { $0.max { $0.logicalFireDate < $1.logicalFireDate }!.identifier }
+        let candidates = eligible.filter {
+            $0.logicalFireDate > date || latestOverdue[$0.paymentKey] == $0.identifier
         }.sorted {
-            $0.logicalFireDate == $1.logicalFireDate ? $0.paymentKey < $1.paymentKey : $0.logicalFireDate < $1.logicalFireDate
+            $0.logicalFireDate == $1.logicalFireDate ? $0.identifier < $1.identifier : $0.logicalFireDate < $1.logicalFireDate
         }
         let available = max(capacity - pending.filter { !$0.identifier.hasPrefix(ReminderIdentity.prefix) }.count, 0)
         let selected = Array(candidates.prefix(available))
-        let selectedIDs = Set(selected.map(\.paymentKey))
+        let selectedIDs = Set(selected.map(\.identifier))
         let displaced = ownPending.filter { desired[$0.identifier] != nil && !selectedIDs.contains($0.identifier) }.map(\.identifier)
         client.removePending(displaced)
         // A removed request has not fired. It must remain eligible when a queue
@@ -238,20 +257,29 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
         scheduledCount = 0; lastError = nil
         for specification in selected {
             guard revision == current else { persistReceipts(); return }
-            if pendingByID[specification.paymentKey]?.userInfo["fingerprint"] == specification.fingerprint {
+            if pendingByID[specification.identifier]?.userInfo["fingerprint"] == specification.fingerprint {
+                consumeEarlierOverdueReminders(than: specification, from: eligible, now: date)
                 scheduledCount += 1; continue
             }
-            client.removePending([specification.paymentKey])
-            client.removeDelivered([specification.paymentKey])
-            receipts.removeValue(forKey: specification.paymentKey)
+            client.removePending([specification.identifier])
+            client.removeDelivered([specification.identifier])
+            receipts.removeValue(forKey: specification.identifier)
             let fire = ReminderPlanner.fireDate(for: specification, now: date)
             do {
                 try await client.add(specification, fireDate: fire)
-                receipts[specification.paymentKey] = ReminderReceipt(occurrenceKey: specification.occurrenceKey, fireDate: fire)
+                receipts[specification.identifier] = ReminderReceipt(occurrenceKey: specification.occurrenceKey, fireDate: fire)
+                consumeEarlierOverdueReminders(than: specification, from: eligible, now: date)
                 scheduledCount += 1
             } catch { lastError = "Some reminders couldn’t be scheduled. Please try again. \(error.localizedDescription)" }
         }
         persistReceipts()
+    }
+
+    private func consumeEarlierOverdueReminders(than selected: ReminderSpecification, from eligible: [ReminderSpecification], now date: Date) {
+        guard selected.logicalFireDate <= date else { return }
+        for earlier in eligible where earlier.paymentKey == selected.paymentKey && earlier.logicalFireDate < selected.logicalFireDate {
+            receipts[earlier.identifier] = ReminderReceipt(occurrenceKey: earlier.occurrenceKey, fireDate: date)
+        }
     }
 
     private func persistReceipts() {
@@ -280,7 +308,7 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
         return await MainActor.run {
             guard let key, let payment = self.snapshots[key], payment.isActive, payment.reminder.isEnabled,
                   payment.occurrenceKey == occurrence,
-                  ReminderPlanner.specification(for: payment)?.fingerprint == fingerprint else { return [] }
+                  ReminderPlanner.specifications(for: payment).contains(where: { $0.fingerprint == fingerprint }) else { return [] }
             return [.banner, .list, .sound]
         }
     }

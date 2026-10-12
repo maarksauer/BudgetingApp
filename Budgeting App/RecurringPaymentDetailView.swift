@@ -4,6 +4,7 @@ import SwiftData
 struct RecurringPaymentDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var recurringUndo: RecurringUndoController
     @Query(sort: \ExpenseTransaction.date, order: .reverse) private var transactions: [ExpenseTransaction]
     @Query(sort: \Wallet.createdAt) private var wallets: [Wallet]
     @Query(sort: \SpendingCategory.createdAt) private var categories: [SpendingCategory]
@@ -54,11 +55,11 @@ struct RecurringPaymentDetailView: View {
                 summary
                 schedule
                 if payment.reminderEnabled {
-                    PaymentReminderOptions(settings: reminderBinding)
+                    PaymentReminderOptions(settings: reminderBinding, secondSettings: secondReminderBinding)
                         .disabled(isSaving)
                     if !payment.isActive {
                         Section {
-                            Text("This payment is paused. Its reminder will resume when you resume the payment.")
+                            Text("This payment is paused. Its reminders will resume when you resume the payment.")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
@@ -154,7 +155,9 @@ struct RecurringPaymentDetailView: View {
         } message: { Text("This postpones the current payment and keeps the normal recurring schedule.") }
         .alert("Skip This Payment?", isPresented: $showingSkipConfirmation) {
             Button("Cancel", role: .cancel) { }
-            Button("Skip", role: .destructive) { perform { try FormStore.skipRecurringPayment(payment, context: modelContext) } }
+            Button("Skip", role: .destructive) {
+                perform { recurringUndo.record(try FormStore.skipRecurringPaymentWithUndo(payment, context: modelContext)) }
+            }
         } message: { Text("No transaction will be created. This moves the payment to its next scheduled date.") }
         .confirmationDialog("Delete Recurring Payment?", isPresented: $showingDeleteConfirmation, titleVisibility: .visible) {
             Button("Delete Recurring Payment", role: .destructive) {
@@ -210,6 +213,12 @@ struct RecurringPaymentDetailView: View {
         })
     }
 
+    private var secondReminderBinding: Binding<ReminderPreferences> {
+        Binding(get: { payment.secondReminderPreferences }, set: { settings in
+            perform { try FormStore.setSecondRecurringReminder(payment, preferences: settings, context: modelContext) }
+        })
+    }
+
     private var currentActions: some View {
         Section("Current Payment") {
             Button { showingConfirmPayment = true } label: {
@@ -217,9 +226,11 @@ struct RecurringPaymentDetailView: View {
             }
             .accessibilityIdentifier("openConfirmPayment")
             Button { showingPostponeOptions = true } label: { Label("Postpone", systemImage: "clock.arrow.circlepath") }
+                .accessibilityIdentifier("postponeRecurringPayment")
             Button(role: .destructive) { showingSkipConfirmation = true } label: {
                 Label("Skip This Payment", systemImage: "forward.end")
             }
+            .accessibilityIdentifier("skipRecurringPayment")
         }
     }
 
@@ -237,7 +248,7 @@ struct RecurringPaymentDetailView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Postpone") {
                         do {
-                            try FormStore.postponeRecurringPayment(payment, until: customPostponeDate, context: modelContext)
+                            recurringUndo.record(try FormStore.postponeRecurringPaymentWithUndo(payment, until: customPostponeDate, context: modelContext))
                             showingCustomPostponeDate = false
                         } catch { saveError = error.localizedDescription; showingPostponeError = true }
                     }
@@ -259,7 +270,7 @@ struct RecurringPaymentDetailView: View {
 
     private func postpone(byDays days: Int) {
         guard let date = Calendar.current.date(byAdding: .day, value: days, to: max(payment.nextPaymentDate, Date())) else { return }
-        perform { try FormStore.postponeRecurringPayment(payment, until: date, context: modelContext) }
+        perform { recurringUndo.record(try FormStore.postponeRecurringPaymentWithUndo(payment, until: date, context: modelContext)) }
     }
 
     private func save() {
