@@ -740,6 +740,98 @@ final class BudgetingAppTests: XCTestCase {
         XCTAssertThrowsError(try AppBackup.decode(JSONSerialization.data(withJSONObject: incompleteJSON)))
     }
 
+    func testAmountGroupingPreservesSignsFractionsAndExactPrecision() throws {
+        let samples: [(String, String)] = [
+            ("", ""), ("-", "-"), ("+", "+"), ("100", "100"), ("1000", "1,000"),
+            ("100000", "100,000"), ("685 000,50", "685,000.50"), ("-100000.00", "-100,000.00"),
+            ("1000.", "1,000."), (".05", ".05"), ("0.000001", "0.000001"),
+            ("123456789012345678901234567890.12345678", "123,456,789,012,345,678,901,234,567,890.12345678")
+        ]
+        for (raw, displayed) in samples {
+            XCTAssertEqual(AmountEditing.displayText(raw), displayed)
+            XCTAssertEqual(AmountInput.parse(AmountEditing.canonicalText(raw)), AmountInput.parse(raw))
+        }
+        XCTAssertEqual(AmountEditing.displayText("12abc"), "12abc")
+        XCTAssertEqual(AmountEditing.displayText("12 34"), "12 34")
+        XCTAssertNil(AmountInput.parse(AmountEditing.canonicalText("12 34")))
+    }
+
+    func testAmountTypingAndPastingKeepsCanonicalValueSeparateFromDisplay() throws {
+        var text = ""
+        var caret = 0
+        for digit in "685000,50" {
+            let change = try XCTUnwrap(AmountEditing.applying(to: text, range: NSRange(location: caret, length: 0), replacement: String(digit)))
+            text = change.text; caret = change.caret
+        }
+        XCTAssertEqual(text, "685000.50")
+        XCTAssertEqual(AmountEditing.displayText(text), "685,000.50")
+        XCTAssertEqual(AmountInput.parse(text), Decimal(string: "685000.50")!)
+        for pasted in ["1,234,567.89", "1.234.567,89", "1 234 567,89"] {
+            let change = try XCTUnwrap(AmountEditing.applying(to: "", range: NSRange(location: 0, length: 0), replacement: pasted))
+            XCTAssertEqual(change.text, "1234567.89")
+            XCTAssertEqual(change.display, "1,234,567.89")
+            XCTAssertEqual(AmountInput.parse(change.text), Decimal(string: "1234567.89")!)
+        }
+        let thousand = try XCTUnwrap(AmountEditing.applying(to: "", range: NSRange(location: 0, length: 0), replacement: "1,000"))
+        XCTAssertEqual(AmountInput.parse(thousand.text), 1000)
+        let invalid = try XCTUnwrap(AmountEditing.applying(to: "", range: NSRange(location: 0, length: 0), replacement: "12abc"))
+        XCTAssertNil(AmountInput.parse(invalid.text))
+        XCTAssertEqual(invalid.display, "12abc")
+    }
+
+    func testAmountMiddleEditsSelectionAndCommaBackspaceRetainCaret() throws {
+        let text = "1234567.89"
+        let inserted = try XCTUnwrap(AmountEditing.applying(to: text, range: NSRange(location: 3, length: 0), replacement: "9"))
+        XCTAssertEqual(inserted.text, "12934567.89")
+        XCTAssertEqual(inserted.display, "12,934,567.89")
+        XCTAssertEqual(inserted.caret, 4)
+        let deletedSeparator = try XCTUnwrap(AmountEditing.applying(to: text, range: NSRange(location: 1, length: 1), replacement: ""))
+        XCTAssertEqual(deletedSeparator.text, "234567.89")
+        XCTAssertEqual(deletedSeparator.display, "234,567.89")
+        XCTAssertEqual(deletedSeparator.caret, 0)
+        let deletedSelection = try XCTUnwrap(AmountEditing.applying(to: text, range: NSRange(location: 2, length: 3), replacement: ""))
+        XCTAssertEqual(deletedSelection.text, "1567.89")
+        XCTAssertEqual(deletedSelection.display, "1,567.89")
+        let replaced = try XCTUnwrap(AmountEditing.applying(to: text, range: NSRange(location: 0, length: 12), replacement: "1000"))
+        XCTAssertEqual(replaced.text, "1000"); XCTAssertEqual(replaced.display, "1,000"); XCTAssertEqual(replaced.caret, 5)
+        XCTAssertNil(AmountEditing.applying(to: text, range: NSRange(location: 99, length: 1), replacement: "0"))
+    }
+
+    func testAmountGroupingDoesNotMakePartialOrRoundedValuesSaveable() throws {
+        let partial = try XCTUnwrap(AmountEditing.applying(to: "1000", range: NSRange(location: 5, length: 0), replacement: ","))
+        XCTAssertEqual(partial.text, "1000."); XCTAssertEqual(partial.display, "1,000.")
+        XCTAssertNil(AmountInput.positive(partial.text))
+        let fraction = try XCTUnwrap(AmountEditing.applying(to: partial.text, range: NSRange(location: partial.caret, length: 0), replacement: "50"))
+        XCTAssertEqual(fraction.text, "1000.50")
+        XCTAssertEqual(AmountInput.positive(fraction.text), Decimal(string: "1000.50")!)
+        let tooPrecise = "123456789012345678901234567890123456789.12"
+        let exactText = try XCTUnwrap(AmountEditing.applying(to: "", range: NSRange(location: 0, length: 0), replacement: tooPrecise))
+        XCTAssertEqual(exactText.text, tooPrecise)
+        XCTAssertNil(AmountInput.parse(exactText.text))
+        let cleared = try XCTUnwrap(AmountEditing.applying(to: "1000.50", range: NSRange(location: 0, length: 8), replacement: ""))
+        XCTAssertEqual(cleared.text, ""); XCTAssertEqual(cleared.display, ""); XCTAssertEqual(cleared.caret, 0)
+    }
+
+    @MainActor
+    func testNewCreditCardDefaultsToZeroWithoutReplacingEnteredBalance() throws {
+        let context = try backupContext()
+        var draft = WalletFormDraft()
+        draft.name = "Card"; draft.walletType = "Credit Card"; draft.negativeBalanceLimit = "250000"
+        draft.applyNewCreditCardDefaults()
+        XCTAssertEqual(draft.startingBalance, "0"); XCTAssertEqual(draft.balance, 0)
+        XCTAssertTrue(draft.canSave)
+        let wallet = try FormStore.createWallet(draft, context: context)
+        XCTAssertEqual(wallet.startingBalance, 0)
+        XCTAssertEqual(wallet.negativeBalanceLimit, 250000)
+        draft.startingBalance = "-35000.50"; draft.applyNewCreditCardDefaults()
+        XCTAssertEqual(draft.startingBalance, "-35000.50")
+        XCTAssertEqual(draft.balance, Decimal(string: "-35000.50")!)
+        draft.startingBalance = "invalid"; draft.applyNewCreditCardDefaults()
+        XCTAssertEqual(draft.startingBalance, "invalid"); XCTAssertFalse(draft.canSave)
+        draft.walletType = "Cash"; draft.startingBalance = ""; draft.applyNewCreditCardDefaults()
+        XCTAssertEqual(draft.startingBalance, "")
+    }
+
     func testAmountInputAcceptsBothDecimalSeparatorsAndExactSpaceGroupedAmounts() throws {
         let inputs: [(String, String)] = [
             ("685 000,50", "685000.5"), ("1\u{00A0}234.05", "1234.05"),

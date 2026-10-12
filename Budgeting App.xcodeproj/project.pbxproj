@@ -64,6 +64,7 @@
 		DEFA15C55F557B280DDA1795 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90DC3CA4E45ADAAAFE557DFB /* NotificationManager.swift */; };
 		1C801D307F54C00F6E01B1C1 /* NotificationSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1077628FC1A983702139AF30 /* NotificationSettingsView.swift */; };
 		D6F6CF8264CB4822CF46BA86 /* RecurringPaymentUndo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B44B592C26583B1D8550C9A /* RecurringPaymentUndo.swift */; };
+		BF1663C06B9C68ECDA2B0EFF /* GroupedAmountField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 445C587096638403D6F005BD /* GroupedAmountField.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -146,6 +147,7 @@
 		90DC3CA4E45ADAAAFE557DFB /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		1077628FC1A983702139AF30 /* NotificationSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationSettingsView.swift; sourceTree = "<group>"; };
 		2B44B592C26583B1D8550C9A /* RecurringPaymentUndo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurringPaymentUndo.swift; sourceTree = "<group>"; };
+		445C587096638403D6F005BD /* GroupedAmountField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupedAmountField.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -232,6 +234,7 @@
 				0C0D61707342A294760D115D /* CurrencyPreferences.swift */,
 				70429AD9EF733B50D58FAD3F /* CurrenciesSettingsView.swift */,
 				238D5D95992C71920F3E8F2F /* AmountInput.swift */,
+				445C587096638403D6F005BD /* GroupedAmountField.swift */,
 				27C0A710BA1BF0942AC68DCB /* FormStore.swift */,
 				A85F0D5B5A0D1D0991090CA4 /* FormFields.swift */,
 				80C395EE7911C525727D320C /* TransactionFormFields.swift */,
@@ -447,6 +450,7 @@
 				1E440F5B469981E796642F50 /* CurrencyPreferences.swift in Sources */,
 				51F5DDB89358F7D438F0D6FC /* CurrenciesSettingsView.swift in Sources */,
 				F21684F9EE6E9F392FACBDFD /* AmountInput.swift in Sources */,
+				BF1663C06B9C68ECDA2B0EFF /* GroupedAmountField.swift in Sources */,
 				79236A6AD89531ECE0A0C1C0 /* FormStore.swift in Sources */,
 				2902FA9AC02A670ACA728B51 /* FormFields.swift in Sources */,
 				592AAE774823538640238A0A /* TransactionFormFields.swift in Sources */,

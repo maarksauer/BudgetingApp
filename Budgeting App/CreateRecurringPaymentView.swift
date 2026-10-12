@@ -31,7 +31,7 @@ struct CreateRecurringPaymentView: View {
                         .disabled(!draft.canSave || isSaving).accessibilityIdentifier("createRecurringPayment")
                 }
                 ToolbarItemGroup(placement: .keyboard) {
-                    if focusedField != nil {
+                    if focusedField != nil && focusedField != .amount {
                         Spacer()
                         Button("Done") { focusedField = nil }.accessibilityIdentifier("recurringFormKeyboardDone")
                     }

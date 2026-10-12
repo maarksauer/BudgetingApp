@@ -2,6 +2,24 @@
 
 A SwiftUI and SwiftData budgeting app. Open `Budgeting App.xcodeproj` in Xcode and select the shared **Budgeting App** scheme.
 
+## Clearer amount entry and credit-card defaults
+
+When creating a wallet, choosing **Credit Card** fills an empty **Starting Balance** with a real **0**. You can create it without touching that field, or change it to your current balance or debt. A balance already entered is retained when choosing Credit Card. The credit limit still requires a positive amount. Existing wallet balances remain unchanged until an edit is saved.
+
+All money-entry fields now add comma thousands separators while you type: **100000 → 100,000**, **685000.50 → 685,000.50**, and **-35000.50 → -35,000.50**. This covers new/edit wallet balances and credit/overdraft limits, new/edit budgets, expenses/income, recurring-payment forms and Paid confirmation, and both sides of transfers. Decimal points or commas can be typed; decimal fractions display with a point. Pasted English grouped amounts (`1,234.50`), decimal-comma amounts (`1234,50`), space-grouped amounts, and grouped European amounts with a decimal comma (`1.234,50`) are normalized before validation.
+
+Grouping is only a display feature. The exact entered numeric value is retained without converting through Double or rounding fractions. Incomplete input such as `1,000.` remains editable and cannot be saved yet. Invalid text remains visible with the existing validation. Caret positions, selections, and deletion work across inserted commas. Editing a saved amount shows grouping immediately. Tapping a prefilled zero selects it for replacement.
+
+Amount keyboards keep **Done**; cross-currency transfer entry also offers **Next** to the received amount. Name-field Next, hardware Return, drag-to-dismiss, draft retention, and protected saves remain supported. Keyboard controls use the existing accessibility identifiers. Native fields use semantic text colors and scalable monospaced digits.
+
+### Check amount entry on an iPhone
+
+1. Create a Credit Card wallet, enter a credit limit, and leave Starting Balance untouched. It should save as zero. Try an entered positive balance and a negative debt before choosing Credit Card; the number should be retained. Edit/Cancel an existing wallet and confirm its saved balance stays unchanged.
+2. Type `100000` into every amount field and check `100,000`. Try `685000.50`, a decimal comma from your keyboard, and a negative wallet balance. Save, reopen Edit, and confirm the exact value survives.
+3. Insert/delete digits in the middle, select and replace part of an amount, and backspace next to a comma. Paste grouped English, space-grouped, and European decimal-comma amounts. Try an invalid paste and an unfinished fraction; Create/Save should stay disabled until corrected.
+4. Check Done, Next on a cross-currency transfer, Return, interactive keyboard dismissal, and tab changes with an unfinished transaction. Check dark appearance and large text; the dock should return after dismissing the keyboard.
+5. Run the Xcode tests. This update adds five focused unit tests and two UI tests; the project includes 86 unit tests and 21 UI tests. Swift syntax, Xcode source wiring, and ZIP integrity were checked here. Native rendering, keyboard/cursor behavior, and XCTest execution require Xcode/device verification. Stored models and backup format remain unchanged.
+
 ## Second reminders and quick Undo
 
 Enable **Reminder** in a payment's **Schedule**, then switch on **Second Reminder** in its reminder options. The second reminder starts Off. Each reminder has its own lead days and time; use **Custom…** for any lead time from 0 to 365 days. The first reminder defaults to the due date at 09:00, and the second to the due date at 18:00. Switching off Reminder stops both while preserving their timing choices. Create/Edit changes remain drafts until saved; adjustments in normal payment details save immediately.
@@ -22,7 +40,7 @@ The second reminder adds four defaulted SwiftData scalar fields so existing save
 4. Paid, then immediately Undo: the new expense should disappear, the balance should return, and the old due/postponed state and reminders should return. Repeat preset/custom Postpone and Skip. Check a postponed bill and confirm unrelated expenses remain.
 5. Check the banner is above the dock in Light/Dark and large text. Dismiss it or wait 30 seconds and verify the action stays saved. Make another action or edit the affected record and check an older Undo is unavailable.
 6. Back up and restore both reminder choices. Restore an older format-3 file and verify its primary settings remain with Second Reminder Off; test format-1/2 files too.
-7. Run the shared Xcode scheme's tests. This update adds ten unit tests and two UI tests, including both-reminder timing, queue/delivery receipts, backup compatibility, action/Undo rollback, and the Undo banner's dock geometry. The project now includes 81 unit tests and 19 UI tests. Only Swift syntax, source wiring, and archive integrity checks were run here; Xcode tests, existing-store migration, rendered SwiftUI, and iOS notification delivery require Apple-toolchain/device verification.
+7. Run the shared Xcode scheme's tests. This update adds ten unit tests and two UI tests, including both-reminder timing, queue/delivery receipts, backup compatibility, action/Undo rollback, and the Undo banner's dock geometry. The project now includes 86 unit tests and 21 UI tests. Only Swift syntax, source wiring, and archive integrity checks were run here; Xcode tests, existing-store migration, rendered SwiftUI, and iOS notification delivery require Apple-toolchain/device verification.
 
 ## Wallet/More row layout and search warning fixes
 
@@ -179,7 +197,7 @@ New/Edit Wallet and New/Edit Budget now share consistent form layouts, live prev
 
 Each form has **Done** above the keyboard and interactive keyboard dismissal by dragging the form. Done preserves typed fields and does not save or close the form. Name-field Next moves to the amount field. Cancel discards the form's changes without changing the wallet or budget record.
 
-Amounts accept a decimal point or comma, optional leading sign where applicable, and properly grouped spaces (including nonbreaking spaces) for thousands. For example, `1 000,50` and `1000.50` both represent 1000.50. Inputs such as `12abc`, `12 34`, mixed decimal/grouping separators, nonfinite values, or values that would silently lose decimal precision are rejected. Wallet starting balance accepts zero or negative values as before; budget totals and credit/overdraft limits must be greater than zero. A budget's end date must be on or after its start date. Moving the start past the end also moves the end to that day.
+Amounts accept a decimal point or comma, optional leading sign where applicable, and properly grouped spaces (including nonbreaking spaces) for thousands. For example, `1 000,50` and `1000.50` both represent 1000.50. Inputs such as `12abc`, malformed grouping, nonfinite values, or values that would silently lose decimal precision are rejected. Wallet starting balance accepts zero or negative values as before; budget totals and credit/overdraft limits must be greater than zero. A budget's end date must be on or after its start date. Moving the start past the end also moves the end to that day.
 
 Create and Save dismiss only after explicit persistence succeeds. If saving fails, the form stays open with its typed entries and displays an error. The pending form mutation is rolled back before autosave resumes, so a failed attempt cannot later silently persist or create duplicates. Existing pending changes are flushed before the form mutation. Wallet currency remains fixed after creation. Editing recurring budgets still offers This Budget Only or This & Future Budgets; past periods, other series, category choices, and future periods' dates are retained.
 
@@ -187,7 +205,7 @@ Create and Save dismiss only after explicit persistence succeeds. If saving fail
 
 1. Start a wallet and enter its name, starting balance, and currency. Check the live preview, friendly icon choices, and color swatches in both Light and Dark appearance. Check long names and larger accessibility text.
 2. Use Done above each keyboard, then drag the form to dismiss it. Values should remain filled and no record should be created. Create from the navigation bar, restart the app, and verify the wallet persists.
-3. Try `1 000,50`, `1000.50`, zero, and a negative starting balance. Try `12abc`, `12 34`, or `1.000,50`; invalid input should show an inline message and disable Create/Save.
+3. Try `1 000,50`, `1000.50`, zero, and a negative starting balance. Try `12abc` or malformed grouping; invalid input should show an inline message and disable Create/Save.
 4. Select Credit Card, check that negative balances are enabled, and enter a positive credit limit. Change to another wallet type and check its balance-rule choices. Edit an existing wallet and Cancel; its prior name/balance/style should remain.
 5. Create and edit a budget. Zero or an invalid amount should disable saving. Move the start date beyond the end date and check the end follows it. Create/Save should work once the name, amount and period are valid.
 6. Edit a recurring series using each scope. This Budget Only should retain later periods' settings. This & Future Budgets should update their name, amount, currency and recurrence while keeping their dates and categories. Earlier periods should remain unchanged.

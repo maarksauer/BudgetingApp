@@ -96,7 +96,7 @@ struct TransferFormFields: View {
                                 submit: { focusNext() }, identifier: "transferSentAmount")
         } header: {
             Text("From")
-        } footer: { Text("Use a decimal point or comma, and spaces for thousands.") }
+        } footer: { Text("Thousands separators appear automatically. Use a decimal point or comma for decimals.") }
 
         Section {
             if editingTransfer == nil {
@@ -196,10 +196,9 @@ private struct TransferAmountInput: View {
             Label(title, systemImage: field == .sent ? "arrow.up.right.circle.fill" : "arrow.down.left.circle.fill")
                 .font(.subheadline.weight(.semibold)).foregroundStyle(tint)
             AmountEntryRow(currency: currency) {
-                TextField("0", text: $text)
-                    .font(.largeTitle.weight(.semibold)).monospacedDigit().keyboardType(.decimalPad)
-                    .focused(focusedField, equals: field).submitLabel(advances ? .next : .done).onSubmit(submit)
-                    .accessibilityLabel(title).accessibilityIdentifier(identifier)
+                GroupedAmountField(text: $text, focusedField: focusedField, field: field,
+                                   identifier: identifier, label: title, keyboardDoneIdentifier: "transferKeyboardDone",
+                                   large: true, advances: advances, onSubmit: submit)
                 }
             if !text.isEmpty && AmountInput.positive(text) == nil {
                 FormValidationMessage(text: "Enter a complete amount greater than zero.")

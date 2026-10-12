@@ -35,7 +35,7 @@ struct CreateTransferView: View {
                         .accessibilityIdentifier("createTransfer")
                 }
                 ToolbarItemGroup(placement: .keyboard) {
-                    if focusedField != nil {
+                    if focusedField == .note {
                         if focusedField == .sent && draft.differentCurrencies {
                             Button("Next") { focusedField = .received }.accessibilityIdentifier("transferKeyboardNext")
                         }

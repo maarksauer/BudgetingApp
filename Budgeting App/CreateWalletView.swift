@@ -38,7 +38,7 @@ struct CreateWalletView: View {
                 }
                 #if os(iOS) || os(visionOS)
                 ToolbarItemGroup(placement: .keyboard) {
-                    if focusedField != nil {
+                    if focusedField == .name {
                         Spacer()
                         Button("Done") { focusedField = nil }
                             .accessibilityIdentifier("walletFormKeyboardDone")
@@ -48,10 +48,7 @@ struct CreateWalletView: View {
             }
             .onDisappear { focusedField = nil }
             .onChange(of: draft.walletType) {
-                if draft.walletType == "Credit Card" {
-                    draft.allowsNegativeBalance = true
-                    draft.icon = "creditcard.fill"
-                }
+                draft.applyNewCreditCardDefaults()
             }
             .onAppear(perform: ensureAvailableCurrency)
             .onChange(of: storedCurrencyPreferences) { ensureAvailableCurrency() }

@@ -95,6 +95,7 @@ struct WalletFormFields: View {
                     Text($0).tag($0)
                 }
             }
+            .accessibilityIdentifier("walletFormType")
             if canChooseCurrency {
                 Picker("Currency", selection: $draft.currencyCode) {
                     ForEach(currencyCodes, id: \.self) { Text($0).tag($0) }
@@ -115,11 +116,9 @@ struct WalletFormFields: View {
     private var balanceSection: some View {
         Section {
             LabeledContent("Starting Balance") {
-                TextField("0", text: $draft.startingBalance)
-                    .keyboardType(.numbersAndPunctuation).multilineTextAlignment(.trailing)
-                    .focused(focusedField, equals: .balance).submitLabel(.done)
-                    .onSubmit { focusedField.wrappedValue = nil }
-                    .accessibilityLabel("Starting balance").accessibilityIdentifier("walletFormBalance")
+                GroupedAmountField(text: $draft.startingBalance, focusedField: focusedField, field: .balance,
+                                   identifier: "walletFormBalance", label: "Starting balance",
+                                   keyboardDoneIdentifier: "walletFormKeyboardDone", signed: true, alignment: .trailing)
             }
             if !draft.startingBalance.isEmpty && draft.balance == nil {
                 FormValidationMessage(text: "Enter a complete number using a decimal point or comma.")
@@ -133,11 +132,9 @@ struct WalletFormFields: View {
             }
             if draft.effectiveAllowsNegativeBalance {
                 LabeledContent(draft.walletType == "Credit Card" ? "Credit Limit" : "Overdraft Limit") {
-                    TextField("0", text: $draft.negativeBalanceLimit)
-                        .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
-                        .focused(focusedField, equals: .limit)
-                        .accessibilityLabel(draft.walletType == "Credit Card" ? "Credit limit" : "Overdraft limit")
-                        .accessibilityIdentifier("walletFormLimit")
+                    GroupedAmountField(text: $draft.negativeBalanceLimit, focusedField: focusedField, field: .limit,
+                                       identifier: "walletFormLimit", label: draft.walletType == "Credit Card" ? "Credit limit" : "Overdraft limit",
+                                       keyboardDoneIdentifier: "walletFormKeyboardDone", alignment: .trailing)
                 }
                 if !draft.negativeBalanceLimit.isEmpty && draft.limit == nil {
                     FormValidationMessage(text: "Enter a limit greater than zero.")
@@ -149,7 +146,7 @@ struct WalletFormFields: View {
             }
         } header: {
             Text("Balance & Limits")
-        } footer: { Text("Starting balance is the balance before your recorded transactions. Use a decimal point or comma, and spaces for thousands.") }
+        } footer: { Text("Starting balance is the balance before your recorded transactions. Thousands separators appear automatically. Use a decimal point or comma for decimals.") }
     }
 
     private var appearanceSection: some View {
@@ -208,10 +205,9 @@ struct BudgetFormFields: View {
                     FormValidationMessage(text: "Enter a budget name.")
                 }
                 LabeledContent("Total Amount") {
-                    TextField("0", text: $draft.amount)
-                        .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
-                        .focused(focusedField, equals: .amount)
-                        .accessibilityLabel("Total amount").accessibilityIdentifier("budgetFormAmount")
+                    GroupedAmountField(text: $draft.amount, focusedField: focusedField, field: .amount,
+                                       identifier: "budgetFormAmount", label: "Total amount",
+                                       keyboardDoneIdentifier: "budgetFormKeyboardDone", alignment: .trailing)
                 }
                 if !draft.amount.isEmpty && draft.total == nil {
                     FormValidationMessage(text: "Enter a complete amount greater than zero.")
@@ -221,7 +217,7 @@ struct BudgetFormFields: View {
                 }
             } header: {
                 Text("Budget Details")
-            } footer: { Text("Use a decimal point or comma, and spaces for thousands.") }
+            } footer: { Text("Thousands separators appear automatically. Use a decimal point or comma for decimals.") }
             Section {
                 DatePicker("Start Date", selection: $draft.startDate, displayedComponents: .date)
                 DatePicker("End Date", selection: $draft.endDate, in: draft.startDate..., displayedComponents: .date)

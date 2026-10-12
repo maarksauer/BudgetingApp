@@ -30,7 +30,7 @@ struct ConfirmRecurringPaymentView: View {
             Form {
                 TransactionAmountSection(title: "Actual payment", symbol: "checkmark.circle.fill", tint: .green,
                                          amount: $draft.amount, currencyCode: payment.wallet?.currencyCode ?? "",
-                                         focusedField: $focusedField, identifier: "confirmPaymentAmount")
+                                         focusedField: $focusedField, identifier: "confirmPaymentAmount", keyboardDoneIdentifier: "confirmPaymentKeyboardDone")
                 Section("Payment") {
                     LabeledContent("Recurring Payment", value: payment.name)
                     LabeledContent("Expected Amount", value: payment.amount.formatted(.number) + " " + (payment.wallet?.currencyCode ?? ""))
@@ -70,7 +70,7 @@ struct ConfirmRecurringPaymentView: View {
                         .disabled(!canConfirm || isSaving).accessibilityIdentifier("confirmRecurringPayment")
                 }
                 ToolbarItemGroup(placement: .keyboard) {
-                    if focusedField != nil {
+                    if focusedField != nil && focusedField != .amount {
                         Spacer()
                         Button("Done") { focusedField = nil }.accessibilityIdentifier("confirmPaymentKeyboardDone")
                     }

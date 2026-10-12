@@ -19,6 +19,13 @@ nonisolated struct WalletFormDraft {
         !cleanedName.isEmpty && balance != nil && !currencyCode.isEmpty &&
         (!effectiveAllowsNegativeBalance || limit != nil)
     }
+
+    mutating func applyNewCreditCardDefaults() {
+        guard walletType == "Credit Card" else { return }
+        if startingBalance.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { startingBalance = "0" }
+        allowsNegativeBalance = true
+        icon = "creditcard.fill"
+    }
 }
 
 @MainActor

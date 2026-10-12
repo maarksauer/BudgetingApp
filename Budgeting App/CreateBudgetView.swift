@@ -41,7 +41,7 @@ struct CreateBudgetView: View {
                 }
                 #if os(iOS) || os(visionOS)
                 ToolbarItemGroup(placement: .keyboard) {
-                    if focusedField != nil {
+                    if focusedField == .name {
                         Spacer()
                         Button("Done") { focusedField = nil }
                             .accessibilityIdentifier("budgetFormKeyboardDone")

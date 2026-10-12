@@ -180,6 +180,86 @@ final class BudgetingAppUITests: XCTestCase {
 
 
     @MainActor
+    func testCreditCardStartsAtZeroAndAllowsAnEditedBalance() {
+        continueAfterFailure = false
+        let app = XCUIApplication(); app.launch()
+        app.buttons["tabWallets"].tap(); app.buttons["openCreateWallet"].tap()
+        let name = "UI card \(UUID().uuidString.prefix(8))"
+        let nameField = app.textFields["walletFormName"]
+        nameField.tap(); nameField.typeText(name)
+        app.buttons["walletFormKeyboardDone"].tap()
+        app.buttons["walletFormType"].tap(); app.buttons["Credit Card"].tap()
+        let balance = app.textFields["walletFormBalance"]
+        scrollToFormElement(balance, in: app)
+        XCTAssertEqual(balance.value as? String, "0")
+        let limit = app.textFields["walletFormLimit"]
+        scrollToFormElement(limit, in: app); limit.tap(); limit.typeText("250000")
+        XCTAssertEqual(limit.value as? String, "250,000")
+        app.buttons["walletFormKeyboardDone"].tap()
+        XCTAssertTrue(app.buttons["createWallet"].isEnabled)
+        app.buttons["createWallet"].tap()
+        openFormTestWallet(name, in: app)
+        app.navigationBars[name].buttons["Edit"].tap()
+        scrollToFormElement(balance, in: app)
+        XCTAssertEqual(balance.value as? String, "0")
+        replaceFormText(balance, with: "-35000.50", displayedAs: "-35,000.50")
+        app.buttons["walletFormKeyboardDone"].tap()
+        app.buttons["saveWallet"].tap()
+        app.navigationBars[name].buttons["Edit"].tap()
+        scrollToFormElement(balance, in: app)
+        XCTAssertEqual(balance.value as? String, "-35,000.5")
+        app.buttons["cancelWalletForm"].tap()
+    }
+
+    @MainActor
+    func testGroupedMoneyInputsPreserveSavedAmountsAndKeyboardControls() {
+        continueAfterFailure = false
+        let app = XCUIApplication(); app.launch()
+        app.buttons["tabWallets"].tap(); app.buttons["openCreateWallet"].tap()
+        let wallet = "UI grouped \(UUID().uuidString.prefix(8))"
+        let name = app.textFields["walletFormName"]
+        name.tap(); name.typeText(wallet + "\n")
+        let balance = app.textFields["walletFormBalance"]
+        balance.typeText("1000000")
+        XCTAssertEqual(balance.value as? String, "1,000,000")
+        app.buttons["walletFormKeyboardDone"].tap()
+        app.buttons["createWallet"].tap()
+        openAddExpense(in: app)
+        chooseFormWallet(wallet, prefix: "expense", in: app)
+        let amount = app.textFields["expenseAmount"]
+        scrollToFormElement(amount, in: app, upward: false)
+        amount.tap(); amount.typeText("685000.50")
+        XCTAssertEqual(amount.value as? String, "685,000.50")
+        dismissExpenseKeyboard(in: app)
+        XCTAssertEqual(amount.value as? String, "685,000.50")
+        XCTAssertTrue(app.buttons["saveTransaction"].isEnabled)
+        let noteText = "UI grouped amount \(UUID().uuidString.prefix(8))"
+        let note = app.textFields["expenseNote"]
+        scrollToFormElement(note, in: app); note.tap(); note.typeText(noteText)
+        dismissExpenseKeyboard(in: app)
+        app.buttons["saveTransaction"].tap()
+        app.alerts["Transaction Added"].buttons["OK"].tap()
+        app.buttons["tabTransactions"].tap()
+        let search = app.searchFields.firstMatch
+        scrollToFormElement(search, in: app, upward: false); search.tap(); search.typeText(noteText + "\n")
+        let row = app.buttons["transactionRow-\(noteText)"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5)); row.tap()
+        app.buttons["editTransaction"].tap()
+        let editAmount = app.textFields["transactionEditAmount"]
+        scrollToFormElement(editAmount, in: app)
+        XCTAssertEqual(editAmount.value as? String, "685,000.5")
+        app.buttons["cancelTransactionEdit"].tap()
+        app.buttons["tabMore"].tap(); app.buttons["openRecurringPayments"].tap()
+        app.buttons["openCreateRecurringPayment"].tap()
+        let recurringAmount = app.textFields["recurringFormAmount"]
+        scrollToFormElement(recurringAmount, in: app); recurringAmount.tap(); recurringAmount.typeText("100000")
+        XCTAssertEqual(recurringAmount.value as? String, "100,000")
+        app.buttons["recurringFormKeyboardDone"].tap()
+        app.buttons["cancelRecurringForm"].tap()
+    }
+
+
+    @MainActor
     func testLaunchOnCentralAddTabAndOverviewNavigation() {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -294,13 +374,13 @@ final class BudgetingAppUITests: XCTestCase {
         app.buttons["tabWallets"].tap()
         openAddExpense(in: app)
         XCTAssertTrue(type.buttons["Income"].isSelected)
-        XCTAssertEqual(amount.value as? String, "685000")
+        XCTAssertEqual(amount.value as? String, "685,000")
         XCTAssertEqual(note.value as? String, "Salary")
         XCTAssertFalse(app.keyboards.firstMatch.exists)
 
         type.buttons["Expense"].tap()
         XCTAssertTrue(type.buttons["Expense"].isSelected)
-        XCTAssertEqual(amount.value as? String, "685000")
+        XCTAssertEqual(amount.value as? String, "685,000")
         XCTAssertEqual(note.value as? String, "Salary")
     }
 
@@ -658,7 +738,7 @@ final class BudgetingAppUITests: XCTestCase {
         app.buttons["transferKeyboardDone"].tap()
         assertKeyboardHidden(in: app)
         XCTAssertEqual(sent.value as? String, "50")
-        XCTAssertEqual(received.value as? String, "20000")
+        XCTAssertEqual(received.value as? String, "20,000")
         let noteValue = "UI exchange \(UUID().uuidString.prefix(8))"
         let note = app.textFields["transferNote"]
         scrollToFormElement(note, in: app)
@@ -672,14 +752,14 @@ final class BudgetingAppUITests: XCTestCase {
         app.buttons["editTransfer"].tap()
         XCTAssertTrue(app.navigationBars["Edit Transfer"].waitForExistence(timeout: 5))
         XCTAssertEqual(sent.value as? String, "50")
-        XCTAssertEqual(received.value as? String, "20000")
+        XCTAssertEqual(received.value as? String, "20,000")
         scrollToFormElement(received, in: app)
         replaceFormText(received, with: "0")
         app.buttons["transferKeyboardDone"].tap()
         XCTAssertFalse(app.buttons["saveTransferEdit"].isEnabled)
         app.buttons["cancelTransferForm"].tap()
         app.buttons["editTransfer"].tap()
-        XCTAssertEqual(received.value as? String, "20000")
+        XCTAssertEqual(received.value as? String, "20,000")
         app.buttons["cancelTransferForm"].tap()
     }
 
@@ -930,7 +1010,7 @@ final class BudgetingAppUITests: XCTestCase {
     }
 
     @MainActor
-    private func replaceFormText(_ field: XCUIElement, with text: String) {
+    private func replaceFormText(_ field: XCUIElement, with text: String, displayedAs: String? = nil) {
         for _ in 0..<8 {
             if field.exists && field.isHittable { break }
             XCUIApplication().swipeDown()
@@ -939,7 +1019,7 @@ final class BudgetingAppUITests: XCTestCase {
         field.tap()
         let previous = field.value as? String ?? ""
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: previous.count) + text)
-        XCTAssertEqual(field.value as? String, text)
+        XCTAssertEqual(field.value as? String, displayedAs ?? text)
     }
 
     @MainActor

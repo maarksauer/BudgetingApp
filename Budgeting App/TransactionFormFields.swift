@@ -88,6 +88,7 @@ struct TransactionAmountSection: View {
     let currencyCode: String
     var focusedField: FocusState<TransactionFormField?>.Binding
     let identifier: String
+    var keyboardDoneIdentifier = "dismissExpenseKeyboard"
 
     var body: some View {
         Section {
@@ -95,11 +96,8 @@ struct TransactionAmountSection: View {
                 Label(title, systemImage: symbol)
                     .font(.subheadline.weight(.semibold)).foregroundStyle(tint)
                 AmountEntryRow(currency: currencyCode) {
-                    TextField("0", text: $amount)
-                        .font(.largeTitle.weight(.semibold)).monospacedDigit()
-                        .keyboardType(.decimalPad)
-                        .focused(focusedField, equals: .amount)
-                        .accessibilityLabel("Amount").accessibilityIdentifier(identifier)
+                    GroupedAmountField(text: $amount, focusedField: focusedField, field: .amount,
+                                       identifier: identifier, label: "Amount", keyboardDoneIdentifier: keyboardDoneIdentifier, large: true)
                 }
                 if !amount.isEmpty && AmountInput.positive(amount) == nil {
                     FormValidationMessage(text: "Enter a complete amount greater than zero.")
@@ -107,7 +105,7 @@ struct TransactionAmountSection: View {
             }
             .padding(.vertical, 8)
         } footer: {
-            Text("Use a decimal point or comma, and spaces for thousands.")
+            Text("Thousands separators appear automatically. Use a decimal point or comma for decimals.")
         }
     }
 }
@@ -187,7 +185,8 @@ struct TransactionFormFields: View {
                                  symbol: draft.isIncome ? "arrow.down.left.circle.fill" : "arrow.up.right.circle.fill",
                                  tint: draft.isIncome ? .green : .orange, amount: $draft.amount,
                                  currencyCode: draft.selectedWallet?.currencyCode ?? "",
-                                 focusedField: focusedField, identifier: "\(prefix)Amount")
+                                 focusedField: focusedField, identifier: "\(prefix)Amount",
+                                 keyboardDoneIdentifier: prefix == "expense" ? "dismissExpenseKeyboard" : "transactionEditKeyboardDone")
         Section("Details") {
             DatePicker("Date", selection: $draft.transactionDate, in: ...Date(), displayedComponents: .date)
             TextField(draft.isIncome ? "Source or note (optional)" : "Note (optional)", text: $draft.note)
@@ -234,7 +233,7 @@ struct RecurringPaymentFormFields: View {
         TransactionAmountSection(title: "Scheduled amount", symbol: "arrow.trianglehead.2.clockwise.rotate.90",
                                  tint: .blue, amount: $draft.details.amount,
                                  currencyCode: draft.details.selectedWallet?.currencyCode ?? "",
-                                 focusedField: focusedField, identifier: "recurringFormAmount")
+                                 focusedField: focusedField, identifier: "recurringFormAmount", keyboardDoneIdentifier: "recurringFormKeyboardDone")
         Section("Schedule") {
             Picker("Repeat", selection: $draft.frequency) {
                 ForEach(RecurringSchedule.frequencies, id: \.self) { Text($0).tag($0) }

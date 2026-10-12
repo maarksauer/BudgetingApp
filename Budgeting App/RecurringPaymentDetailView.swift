@@ -132,7 +132,7 @@ struct RecurringPaymentDetailView: View {
                 }
             }
             ToolbarItemGroup(placement: .keyboard) {
-                if focusedField != nil {
+                if focusedField != nil && focusedField != .amount {
                     Spacer()
                     Button("Done") { focusedField = nil }.accessibilityIdentifier("recurringFormKeyboardDone")
                 }
